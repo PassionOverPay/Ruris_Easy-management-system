@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from sqlmodel import Session, select
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(REPOSITORY_ROOT / ".env.local")
+load_dotenv(".env.local")
 sys.path.insert(0, str(REPOSITORY_ROOT / "backend"))
 
 from app.core.security import hash_password  # noqa: E402
