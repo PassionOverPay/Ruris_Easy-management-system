@@ -18,7 +18,6 @@ class InvoiceCreate(SQLModel):
         max_digits=12,
         decimal_places=2,
     )
-    logged_by_id: int
 
 
 class InvoiceRead(SQLModel):

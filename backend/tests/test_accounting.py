@@ -10,7 +10,9 @@ from sqlmodel.pool import StaticPool
 
 from app.db.session import get_session
 from app.main import app
-from app.models import Currency, Invoice, User, UserRole
+from app.models import AuditLog, Invoice, User, UserRole
+from app.core.config import settings
+from app.core.security import create_access_token, hash_password
 from app.services.currency import (
     ExchangeRateUnavailable,
     get_eur_to_ron_rate,
@@ -152,15 +154,25 @@ class InvoiceEndpointTests(unittest.TestCase):
         )
         SQLModel.metadata.create_all(self.engine)
         self.session = Session(self.engine)
+        self.secret_patcher = patch.object(
+            settings,
+            "JWT_SECRET_KEY",
+            "test-secret-key-with-at-least-32-characters",
+        )
+        self.secret_patcher.start()
         user = User(
             email="accounting@example.com",
-            hashed_password="not-a-real-password-hash",
+            full_name="Accounting User",
+            hashed_password=hash_password("correct-password"),
             role=UserRole.ACCOUNTING,
         )
         self.session.add(user)
         self.session.commit()
         self.session.refresh(user)
         self.user_id = user.id
+        self.headers = {
+            "Authorization": f"Bearer {create_access_token(str(user.id))}"
+        }
 
         def override_get_session():
             yield self.session
@@ -173,6 +185,7 @@ class InvoiceEndpointTests(unittest.TestCase):
         app.dependency_overrides.pop(get_session, None)
         self.session.close()
         self.engine.dispose()
+        self.secret_patcher.stop()
 
     def invoice_payload(self, currency: str) -> dict[str, object]:
         return {
@@ -181,7 +194,6 @@ class InvoiceEndpointTests(unittest.TestCase):
             "invoice_date": "2026-10-16",
             "currency": currency,
             "amount_original": "100.00",
-            "logged_by_id": self.user_id,
         }
 
     def test_eur_invoice_fetches_rate_and_saves_converted_amount(self) -> None:
@@ -193,14 +205,41 @@ class InvoiceEndpointTests(unittest.TestCase):
             response = self.client.post(
                 "/api/v1/accounting/invoices",
                 json=self.invoice_payload("EUR"),
+                headers=self.headers,
             )
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["exchange_rate"], "5.331000")
         self.assertEqual(response.json()["amount_ron"], "533.10")
+        self.assertEqual(response.json()["logged_by_id"], self.user_id)
         get_rate.assert_awaited_once_with(date(2026, 10, 16))
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.amount_ron, Decimal("533.10"))
+        audit = self.session.exec(select(AuditLog)).one()
+        self.assertEqual(audit.action, "create")
+        self.assertEqual(audit.entity_name, "Invoice")
+        self.assertEqual(audit.entity_id, str(saved.id))
+
+    def test_non_accounting_role_cannot_create_invoice(self) -> None:
+        purchaser = User(
+            email="buyer@example.com",
+            full_name="Buyer User",
+            hashed_password=hash_password("buyer-password"),
+            role=UserRole.PURCHASING,
+        )
+        self.session.add(purchaser)
+        self.session.commit()
+        self.session.refresh(purchaser)
+        token = create_access_token(str(purchaser.id))
+
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=self.invoice_payload("RON"),
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.session.exec(select(Invoice)).all(), [])
 
     def test_ron_invoice_does_not_call_external_rate_service(self) -> None:
         with patch(
@@ -210,6 +249,7 @@ class InvoiceEndpointTests(unittest.TestCase):
             response = self.client.post(
                 "/api/v1/accounting/invoices",
                 json=self.invoice_payload("RON"),
+                headers=self.headers,
             )
 
         self.assertEqual(response.status_code, 201)
@@ -228,6 +268,7 @@ class InvoiceEndpointTests(unittest.TestCase):
             response = self.client.post(
                 "/api/v1/accounting/invoices",
                 json=self.invoice_payload("EUR"),
+                headers=self.headers,
             )
 
         self.assertEqual(response.status_code, 503)

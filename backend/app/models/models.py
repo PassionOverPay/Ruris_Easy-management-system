@@ -11,6 +11,7 @@ class UserRole(str, Enum):
     PURCHASING = "purchasing"
     WAREHOUSE = "warehouse"
     ACCOUNTING = "accounting"
+    ADMIN = "admin"
 
 
 class PurchaseOrderStatus(str, Enum):
@@ -37,7 +38,9 @@ class User(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
+    full_name: str
     hashed_password: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     role: UserRole = Field(
         sa_column=Column(
             SQLAlchemyEnum(

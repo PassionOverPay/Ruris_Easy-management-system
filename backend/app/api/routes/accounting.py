@@ -5,9 +5,11 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
+from app.api.dependencies import RequireRole
 from app.db.session import get_session
-from app.models import Currency, Invoice
+from app.models import Currency, Invoice, User, UserRole
 from app.schemas.invoice import InvoiceCreate, InvoiceRead
+from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
 
 router = APIRouter()
@@ -17,7 +19,11 @@ router = APIRouter()
 async def create_invoice(
     invoice_data: InvoiceCreate,
     session: Session = Depends(get_session),
+    current_user: User = Depends(RequireRole([UserRole.ACCOUNTING])),
 ) -> Invoice:
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Authenticated user is invalid")
+
     if invoice_data.currency == Currency.EUR:
         try:
             exchange_rate = await get_eur_to_ron_rate(invoice_data.invoice_date)
@@ -34,6 +40,7 @@ async def create_invoice(
         **invoice_data.model_dump(),
         exchange_rate=exchange_rate,
         amount_ron=amount_ron,
+        logged_by_id=current_user.id,
     )
     session.add(invoice)
     try:
@@ -44,5 +51,12 @@ async def create_invoice(
             status_code=400,
             detail="Invoice could not be saved; check the invoice number and linked IDs.",
         ) from exc
+    log_action(
+        session,
+        current_user.id,
+        "create",
+        "Invoice",
+        str(invoice.id),
+    )
     session.refresh(invoice)
     return invoice

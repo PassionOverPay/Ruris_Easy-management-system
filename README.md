@@ -14,26 +14,41 @@ uvicorn app.main:app --reload --app-dir backend
 The API docs are available at `http://127.0.0.1:8000/docs`; the health check is
 `http://127.0.0.1:8000/api/v1/health`.
 
-The database defaults to a local SQLite file. The app reads `DATABASE_URL` from
-the process environment, a root `.env` file, or a root `.env.local` file (the
-last file takes precedence if both files define it). Neon CLI provides the
-pooled production connection in `.env.local`:
+The app reads local configuration from the root `.env.local`, independent of
+the launch directory; process environment variables take precedence. Keep
+`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and application secrets in this ignored
+file. Neon CLI provides the pooled connection used by the app and direct
+connection used by Alembic:
 
 ```text
 DATABASE_URL=postgresql://user:password@host-pooler.region.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL_UNPOOLED=postgresql://user:password@host.region.aws.neon.tech/neondb?sslmode=require
 ```
 
 The SQLModel engine uses Psycopg 3 and converts standard `postgresql://` Neon
 URLs to the SQLAlchemy `postgresql+psycopg://` dialect. The database probe at
 `/api/v1/health/database` verifies a live connection.
 
+Authentication uses JWT bearer tokens. Set `JWT_SECRET_KEY` in `.env.local` to
+at least 32 random bytes before using `/token`. Sign in with an OAuth2 form
+containing `username` (the user's email) and `password`; access tokens expire
+after 30 minutes by default.
+
+There is no public sign-up. After applying database migrations, bootstrap the
+first administrator by setting `FIRST_ADMIN_EMAIL` and `FIRST_ADMIN_PASSWORD`
+in the process environment or root `.env.local`, then run
+`python scripts/create_first_admin.py` from the repository root. The script
+does nothing if an admin already exists. An authenticated admin can provision
+department users with `POST /api/v1/admin/users`; the request accepts
+`email`, `password`, `full_name`, and a `purchasing`, `warehouse`, or
+`accounting` role. The response never includes the password.
+
 ## Layout
 
 `backend/app` follows the modular layout used by the official FastAPI full-stack
 template: `api` for versioned routes, `core` for configuration, `db` for session
 management, and `crud`, `models`, and `schemas` for data access and domain
-definitions. The purchasing, warehouse, accounting, and auth routers are
-intentionally empty scaffolds; only the health check is implemented.
+definitions. The warehouse router remains an empty scaffold.
 
 The SQLModel tables are in `backend/app/models/models.py`. The purchasing
 endpoint `GET /api/v1/purchasing/{purchase_order_id}/match` aggregates all
@@ -47,6 +62,14 @@ then try Frankfurter for that exact historical date. If neither source provides
 a valid rate for the date, the endpoint returns `503` and does not save the
 invoice. RON invoices use an exchange rate of `1`.
 
-Authentication and department-level authorization, persisted audit logging,
-delayed-order notifications, and a scheduled daily exchange-rate job remain to
-be implemented before this API is used with operational data.
+Database migrations use the root `alembic.ini` and the direct Neon connection
+in root `.env.local` (`DATABASE_URL_UNPOOLED`); run them from the repository
+root with `python -m alembic -c alembic.ini upgrade head`. The application
+continues to use its pooled `DATABASE_URL` for normal traffic.
+
+The invoice create, purchase-order create, and purchase-order match endpoints
+are restricted to Accounting or Purchasing as appropriate. Successful login,
+invoice creation, purchase-order creation, and purchase-order matching actions
+are written to `AuditLog`. Additional department routes still need their own
+role guards and audit calls as they are implemented. Delayed-order notifications
+and a scheduled daily exchange-rate job are also pending.
