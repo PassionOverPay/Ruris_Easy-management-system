@@ -35,6 +35,12 @@ management, and `crud`, `models`, and `schemas` for data access and domain
 definitions. The purchasing, warehouse, accounting, and auth routers are
 intentionally empty scaffolds; only the health check is implemented.
 
+The SQLModel tables are in `backend/app/models/models.py`. The purchasing
+endpoint `GET /api/v1/purchasing/{purchase_order_id}/match` aggregates all
+linked receipts and reports matched, missing, over-received, and unexpected
+item quantities. Run its SQLite-backed tests from `backend` with
+`python -m unittest discover -s tests -v`.
+
 Authentication and department-level authorization, persisted audit logging,
 delayed-order notifications, and the daily EUR/RON rate job remain to be
 implemented before this API is used with operational data.
