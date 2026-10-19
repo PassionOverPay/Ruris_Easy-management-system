@@ -41,6 +41,12 @@ linked receipts and reports matched, missing, over-received, and unexpected
 item quantities. Run its SQLite-backed tests from `backend` with
 `python -m unittest discover -s tests -v`.
 
+Accounting creates invoices through `POST /api/v1/accounting/invoices`. EUR
+invoices use the BNR rate when its published date matches the invoice date,
+then try Frankfurter for that exact historical date. If neither source provides
+a valid rate for the date, the endpoint returns `503` and does not save the
+invoice. RON invoices use an exchange rate of `1`.
+
 Authentication and department-level authorization, persisted audit logging,
-delayed-order notifications, and the daily EUR/RON rate job remain to be
-implemented before this API is used with operational data.
+delayed-order notifications, and a scheduled daily exchange-rate job remain to
+be implemented before this API is used with operational data.
