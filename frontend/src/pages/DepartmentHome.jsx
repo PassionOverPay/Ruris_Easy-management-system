@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../auth/AuthContext";
 
@@ -68,6 +68,21 @@ export default function DepartmentHome({ role }) {
           <span className="brand-mark small">SC</span>
           <span>Supply Chain</span>
         </Link>
+        {user.role === "admin" && (
+          <nav aria-label="Workspace navigation" className="workspace-navigation">
+            {Object.entries(departmentContent).map(([department, details]) => (
+              <NavLink
+                key={department}
+                className={({ isActive }) =>
+                  `workspace-nav-link${isActive ? " active" : ""}`
+                }
+                to={`/${department}`}
+              >
+                {details.title}
+              </NavLink>
+            ))}
+          </nav>
+        )}
         <div className="user-menu">
           <span>{user.full_name}</span>
           <button className="text-button" onClick={logout} type="button">
