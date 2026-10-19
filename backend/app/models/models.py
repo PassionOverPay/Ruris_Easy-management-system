@@ -17,6 +17,7 @@ class UserRole(str, Enum):
 class PurchaseOrderStatus(str, Enum):
     ORDERED = "ordered"
     PARTIALLY_RECEIVED = "partially_received"
+    BLOCKED = "blocked"
     RECEIVED = "received"
     CANCELLED = "cancelled"
 

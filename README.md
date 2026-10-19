@@ -71,5 +71,12 @@ The invoice create, purchase-order create, and purchase-order match endpoints
 are restricted to Accounting or Purchasing as appropriate. Successful login,
 invoice creation, purchase-order creation, and purchase-order matching actions
 are written to `AuditLog`. Additional department routes still need their own
-role guards and audit calls as they are implemented. Delayed-order notifications
-and a scheduled daily exchange-rate job are also pending.
+role guards and audit calls as they are implemented.
+
+The app checks for overdue purchase orders each day at 08:00 in the server's
+local timezone and emails all Purchasing users. Orders with `received` or
+`cancelled` status, and orders expected today, are excluded. Overdue `blocked`
+orders are included. Configure
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` in the process
+environment or root `.env.local`. Port 465 uses implicit TLS; other ports use
+STARTTLS.
