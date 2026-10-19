@@ -43,6 +43,14 @@ department users with `POST /api/v1/admin/users`; the request accepts
 `email`, `password`, `full_name`, and a `purchasing`, `warehouse`, or
 `accounting` role. The response never includes the password.
 
+The React/Vite client lives in `frontend/`. From that directory, run
+`npm install` and `npm run dev`. Vite proxies API requests to
+`http://127.0.0.1:8000` by default; set `VITE_BACKEND_URL` in
+`frontend/.env.local` to use another backend origin during development. After
+login, the client retrieves the authenticated identity from
+`GET /api/v1/users/me` to hydrate role-aware route guards. The root npm
+manifest remains dedicated to Neon CLI configuration.
+
 ## Layout
 
 `backend/app` follows the modular layout used by the official FastAPI full-stack

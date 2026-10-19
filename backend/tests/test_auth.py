@@ -221,6 +221,26 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
             ).first()
         )
 
+    def test_current_user_endpoint_returns_profile_without_password_fields(self) -> None:
+        token = self.token_for("buyer@example.com", "buyer-password")
+
+        response = self.client.get(
+            "/api/v1/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["email"], "buyer@example.com")
+        self.assertEqual(response.json()["full_name"], "Buyer User")
+        self.assertEqual(response.json()["role"], "purchasing")
+        self.assertNotIn("password", response.json())
+        self.assertNotIn("hashed_password", response.json())
+
+    def test_current_user_endpoint_requires_authentication(self) -> None:
+        response = self.client.get("/api/v1/users/me")
+
+        self.assertEqual(response.status_code, 401)
+
     def test_admin_cannot_create_another_admin_through_provisioning(self) -> None:
         token = self.token_for("admin@example.com", "admin-password")
 
