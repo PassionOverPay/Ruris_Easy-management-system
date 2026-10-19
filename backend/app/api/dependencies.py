@@ -46,7 +46,7 @@ def RequireRole(allowed_roles: list[UserRole]) -> Callable[..., User]:
     def check_role(
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
-        if current_user.role not in allowed:
+        if not allowed.intersection(current_user.roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have permission to access this resource",

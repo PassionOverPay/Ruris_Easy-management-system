@@ -6,7 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
 from app.core.config import settings
-from app.core.security import hash_password, verify_password
+from app.core.security import decode_access_token, hash_password, verify_password
 from app.db.session import get_session
 from app.main import app
 from app.models import AuditLog, PurchaseOrder, User, UserRole
@@ -32,19 +32,19 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
             email="buyer@example.com",
             full_name="Buyer User",
             hashed_password=hash_password("buyer-password"),
-            role=UserRole.PURCHASING,
+            roles=[UserRole.PURCHASING.value],
         )
         self.accountant = User(
             email="accounting@example.com",
             full_name="Accounting User",
             hashed_password=hash_password("accounting-password"),
-            role=UserRole.ACCOUNTING,
+            roles=[UserRole.ACCOUNTING.value],
         )
         self.admin = User(
             email="admin@example.com",
             full_name="Admin User",
             hashed_password=hash_password("admin-password"),
-            role=UserRole.ADMIN,
+            roles=[UserRole.ADMIN.value],
         )
         self.session.add_all([self.purchaser, self.accountant, self.admin])
         self.session.commit()
@@ -77,6 +77,10 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
         token = self.token_for("buyer@example.com", "buyer-password")
 
         self.assertTrue(token)
+        self.assertEqual(
+            decode_access_token(token)["roles"],
+            [UserRole.PURCHASING.value],
+        )
         logs = self.session.exec(select(AuditLog)).all()
         self.assertEqual(len(logs), 1)
         self.assertEqual(logs[0].user_id, self.purchaser.id)
@@ -144,7 +148,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
 
     def test_user_role_is_loaded_from_database_for_each_request(self) -> None:
         token = self.token_for("buyer@example.com", "buyer-password")
-        self.purchaser.role = UserRole.ACCOUNTING
+        self.purchaser.roles = [UserRole.ACCOUNTING.value]
         self.session.add(self.purchaser)
         self.session.commit()
 
@@ -172,7 +176,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
                 "email": "warehouse@example.com",
                 "password": "initial-password",
                 "full_name": "Warehouse User",
-                "role": "warehouse",
+                "roles": ["warehouse", "accounting"],
             },
         )
 
@@ -181,7 +185,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
         self.assertNotIn("password", response_data)
         self.assertNotIn("hashed_password", response_data)
         self.assertEqual(response_data["email"], "warehouse@example.com")
-        self.assertEqual(response_data["role"], "warehouse")
+        self.assertEqual(response_data["roles"], ["warehouse", "accounting"])
         self.assertEqual(response_data["full_name"], "Warehouse User")
         created_user = self.session.exec(
             select(User).where(User.email == "warehouse@example.com")
@@ -210,7 +214,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
                 "email": "new-user@example.com",
                 "password": "initial-password",
                 "full_name": "New User",
-                "role": "accounting",
+                "roles": ["accounting"],
             },
         )
 
@@ -232,7 +236,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["email"], "buyer@example.com")
         self.assertEqual(response.json()["full_name"], "Buyer User")
-        self.assertEqual(response.json()["role"], "purchasing")
+        self.assertEqual(response.json()["roles"], ["purchasing"])
         self.assertNotIn("password", response.json())
         self.assertNotIn("hashed_password", response.json())
 
@@ -251,11 +255,46 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
                 "email": "another-admin@example.com",
                 "password": "initial-password",
                 "full_name": "Another Admin",
-                "role": "admin",
+                "roles": ["admin"],
             },
         )
 
         self.assertEqual(response.status_code, 422)
+
+    def test_multiple_roles_authorize_each_matching_route(self) -> None:
+        self.purchaser.roles = [
+            UserRole.PURCHASING.value,
+            UserRole.ACCOUNTING.value,
+        ]
+        self.session.add(self.purchaser)
+        self.session.commit()
+        token = self.token_for("buyer@example.com", "buyer-password")
+        headers = {"Authorization": f"Bearer {token}"}
+
+        purchase_order_response = self.client.post(
+            "/api/v1/purchasing",
+            headers=headers,
+            json={
+                "po_number": "PO-MULTI-001",
+                "supplier_name": "Supplier",
+                "order_date": "2026-10-19",
+                "expected_delivery_date": "2026-10-26",
+            },
+        )
+        invoice_response = self.client.post(
+            "/api/v1/accounting/invoices",
+            headers=headers,
+            json={
+                "invoice_number": "INV-MULTI-001",
+                "supplier_name": "Supplier",
+                "invoice_date": "2026-10-19",
+                "currency": "RON",
+                "amount_original": "10.00",
+            },
+        )
+
+        self.assertEqual(purchase_order_response.status_code, 201)
+        self.assertEqual(invoice_response.status_code, 201)
 
 
 if __name__ == "__main__":

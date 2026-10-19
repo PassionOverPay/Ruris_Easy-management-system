@@ -32,14 +32,14 @@ class ThreeWayMatchTests(unittest.TestCase):
             email="buyer@example.com",
             full_name="Buyer User",
             hashed_password=hash_password("correct-password"),
-            role=UserRole.PURCHASING,
+            roles=[UserRole.PURCHASING.value],
         )
         self.session.add(user)
         self.session.commit()
         self.session.refresh(user)
         self.user_id = user.id
         self.headers = {
-            "Authorization": f"Bearer {create_access_token(str(user.id))}"
+            "Authorization": f"Bearer {create_access_token(str(user.id), user.roles)}"
         }
 
         def override_get_session():

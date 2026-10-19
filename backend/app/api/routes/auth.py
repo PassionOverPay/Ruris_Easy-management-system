@@ -30,7 +30,7 @@ def login_for_access_token(
         )
 
     try:
-        access_token = create_access_token(str(user.id))
+        access_token = create_access_token(str(user.id), user.roles)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

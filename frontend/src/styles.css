@@ -414,6 +414,37 @@ p {
   color: #17231e;
 }
 
+.role-options {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 14px;
+  border: 1px solid #dce4dd;
+  border-radius: 8px;
+}
+
+.role-options legend {
+  padding: 0 5px;
+  color: #34463c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 !important;
+  color: #52645a !important;
+  font-weight: 400 !important;
+}
+
+.role-option input {
+  width: 16px;
+  min-height: 16px;
+  accent-color: #1e4937;
+}
+
 .provision-form button {
   min-height: 45px;
   margin-top: 8px;

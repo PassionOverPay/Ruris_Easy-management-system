@@ -25,7 +25,7 @@ def create_user(
         email=user_data.email,
         full_name=user_data.full_name,
         hashed_password=hash_password(user_data.password),
-        role=UserRole(user_data.role),
+        roles=[role.value for role in user_data.roles],
     )
     session.add(user)
     try:

@@ -21,7 +21,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, roles: list[str]) -> str:
     secret_key = settings.JWT_SECRET_KEY
     if secret_key is None or len(secret_key.encode("utf-8")) < 32:
         raise RuntimeError("JWT_SECRET_KEY must be configured with at least 32 characters")
@@ -30,7 +30,7 @@ def create_access_token(subject: str) -> str:
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     return jwt.encode(
-        {"sub": subject, "exp": expires_at},
+        {"sub": subject, "roles": roles, "exp": expires_at},
         secret_key,
         algorithm=ALGORITHM,
     )

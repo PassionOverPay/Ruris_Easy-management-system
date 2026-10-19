@@ -24,13 +24,13 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
             email="buyer@example.com",
             full_name="Buyer User",
             hashed_password=hash_password("password"),
-            role=UserRole.PURCHASING,
+            roles=[UserRole.PURCHASING.value],
         )
         self.warehouse_user = User(
             email="warehouse@example.com",
             full_name="Warehouse User",
             hashed_password=hash_password("password"),
-            role=UserRole.WAREHOUSE,
+            roles=[UserRole.WAREHOUSE.value],
         )
         self.session.add_all([self.purchasing_user, self.warehouse_user])
         self.session.commit()

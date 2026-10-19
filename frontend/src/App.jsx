@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import ProtectedRoute from "./auth/ProtectedRoute";
+import ProtectedRoute, { homeForRoles } from "./auth/ProtectedRoute";
 import { useAuth } from "./auth/AuthContext";
 import DepartmentHome from "./pages/DepartmentHome";
 import Login from "./pages/Login";
@@ -9,7 +9,7 @@ function HomeRedirect() {
   if (loading) {
     return <main className="loading-screen">Loading your workspace…</main>;
   }
-  return <Navigate to={user ? `/${user.role}` : "/login"} replace />;
+  return <Navigate to={user ? homeForRoles(user.roles) : "/login"} replace />;
 }
 
 export default function App() {
@@ -17,22 +17,22 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<ProtectedRoute />}>
-        <Route element={<ProtectedRoute allowedRole="admin" />}>
+        <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
           <Route path="/admin" element={<DepartmentHome role="admin" />} />
         </Route>
-        <Route element={<ProtectedRoute allowedRole="purchasing" />}>
+        <Route element={<ProtectedRoute allowedRoles={["purchasing", "admin"]} />}>
           <Route
             path="/purchasing"
             element={<DepartmentHome role="purchasing" />}
           />
         </Route>
-        <Route element={<ProtectedRoute allowedRole="warehouse" />}>
+        <Route element={<ProtectedRoute allowedRoles={["warehouse", "admin"]} />}>
           <Route
             path="/warehouse"
             element={<DepartmentHome role="warehouse" />}
           />
         </Route>
-        <Route element={<ProtectedRoute allowedRole="accounting" />}>
+        <Route element={<ProtectedRoute allowedRoles={["accounting", "admin"]} />}>
           <Route
             path="/accounting"
             element={<DepartmentHome role="accounting" />}

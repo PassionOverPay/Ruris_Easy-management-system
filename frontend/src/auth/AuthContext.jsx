@@ -10,6 +10,30 @@ import api from "../api/axios";
 
 const AuthContext = createContext(null);
 
+function rolesFromToken(token) {
+  try {
+    const payloadPart = token.split(".")[1];
+    if (!payloadPart) return [];
+
+    const base64 = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(
+      decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map((character) =>
+            `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`,
+          )
+          .join(""),
+      ),
+    );
+    return Array.isArray(payload.roles)
+      ? payload.roles.filter((role) => typeof role === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +52,11 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const response = await api.get("/api/v1/users/me");
-      setUser(response.data);
+      const tokenRoles = rolesFromToken(token);
+      setUser({
+        ...response.data,
+        roles: tokenRoles.length > 0 ? tokenRoles : response.data.roles,
+      });
     } catch (error) {
       setUser(null);
       if (error.response?.status === 401) {
@@ -57,12 +85,18 @@ export function AuthProvider({ children }) {
     const tokenResponse = await api.post("/token", form, {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
-    localStorage.setItem("access_token", tokenResponse.data.access_token);
+    const token = tokenResponse.data.access_token;
+    localStorage.setItem("access_token", token);
     setAuthError("");
     try {
       const userResponse = await api.get("/api/v1/users/me");
-      setUser(userResponse.data);
-      return userResponse.data;
+      const tokenRoles = rolesFromToken(token);
+      const signedInUser = {
+        ...userResponse.data,
+        roles: tokenRoles.length > 0 ? tokenRoles : userResponse.data.roles,
+      };
+      setUser(signedInUser);
+      return signedInUser;
     } catch (error) {
       localStorage.removeItem("access_token");
       setUser(null);

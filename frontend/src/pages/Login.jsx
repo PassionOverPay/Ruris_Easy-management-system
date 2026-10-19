@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { roleHome } from "../auth/ProtectedRoute";
+import { homeForRoles, roleHome } from "../auth/ProtectedRoute";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Login() {
@@ -13,7 +13,7 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
 
   if (user) {
-    return <Navigate to={roleHome[user.role] || "/login"} replace />;
+    return <Navigate to={homeForRoles(user.roles)} replace />;
   }
 
   async function handleSubmit(event) {
@@ -23,10 +23,16 @@ export default function Login() {
     try {
       const signedInUser = await login(email.trim(), password);
       const requestedPath = location.state?.from?.pathname;
+      const requestedRole = Object.keys(roleHome).find(
+        (role) => roleHome[role] === requestedPath,
+      );
       const destination =
-        requestedPath === roleHome[signedInUser.role]
+        requestedPath &&
+        requestedRole &&
+        (signedInUser.roles.includes(requestedRole) ||
+          signedInUser.roles.includes("admin"))
           ? requestedPath
-          : roleHome[signedInUser.role] || "/login";
+          : homeForRoles(signedInUser.roles);
       navigate(destination, { replace: true });
     } catch (loginError) {
       const status = loginError.response?.status;

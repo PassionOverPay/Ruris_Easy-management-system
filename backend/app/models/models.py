@@ -42,15 +42,9 @@ class User(SQLModel, table=True):
     full_name: str
     hashed_password: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    role: UserRole = Field(
-        sa_column=Column(
-            SQLAlchemyEnum(
-                UserRole,
-                name="user_role",
-                values_callable=lambda enum: [member.value for member in enum],
-            ),
-            nullable=False,
-        )
+    roles: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, default=list),
     )
 
 

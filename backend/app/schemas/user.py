@@ -11,11 +11,13 @@ class UserCreate(SQLModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1)
     full_name: str = Field(min_length=1, max_length=255)
-    role: Literal[
-        UserRole.PURCHASING,
-        UserRole.WAREHOUSE,
-        UserRole.ACCOUNTING,
-    ]
+    roles: list[
+        Literal[
+            UserRole.PURCHASING,
+            UserRole.WAREHOUSE,
+            UserRole.ACCOUNTING,
+        ]
+    ] = Field(min_length=1)
 
 
 class UserResponse(SQLModel):
@@ -24,5 +26,5 @@ class UserResponse(SQLModel):
     id: int
     email: str
     full_name: str
-    role: UserRole
+    roles: list[str]
     created_at: datetime

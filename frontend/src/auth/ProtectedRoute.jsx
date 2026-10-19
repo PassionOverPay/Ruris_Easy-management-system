@@ -8,7 +8,13 @@ export const roleHome = {
   accounting: "/accounting",
 };
 
-export default function ProtectedRoute({ allowedRole }) {
+export function homeForRoles(roles = []) {
+  if (roles.includes("admin")) return roleHome.admin;
+  const departmentRole = roles.find((role) => role in roleHome);
+  return departmentRole ? roleHome[departmentRole] : "/login";
+}
+
+export default function ProtectedRoute({ allowedRoles }) {
   const { user, loading, authError, refreshUser } = useAuth();
   const location = useLocation();
 
@@ -29,8 +35,11 @@ export default function ProtectedRoute({ allowedRole }) {
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
-  if (allowedRole && user.role !== allowedRole && user.role !== "admin") {
-    return <Navigate to={roleHome[user.role] || "/login"} replace />;
+  if (
+    allowedRoles &&
+    !user.roles.some((role) => allowedRoles.includes(role))
+  ) {
+    return <Navigate to={homeForRoles(user.roles)} replace />;
   }
   return <Outlet />;
 }

@@ -22,6 +22,13 @@ const departmentContent = {
   },
 };
 
+const navigationRoles = {
+  admin: ["admin"],
+  purchasing: ["purchasing", "admin"],
+  warehouse: ["warehouse", "admin"],
+  accounting: ["accounting", "admin"],
+};
+
 export default function DepartmentHome({ role }) {
   const { user, logout } = useAuth();
   const content = departmentContent[role];
@@ -29,7 +36,7 @@ export default function DepartmentHome({ role }) {
     email: "",
     full_name: "",
     password: "",
-    role: "purchasing",
+    roles: ["purchasing"],
   });
   const [provisionMessage, setProvisionMessage] = useState("");
   const [provisionError, setProvisionError] = useState("");
@@ -47,7 +54,7 @@ export default function DepartmentHome({ role }) {
         email: "",
         full_name: "",
         password: "",
-        role: "purchasing",
+        roles: ["purchasing"],
       });
     } catch (error) {
       const status = error.response?.status;
@@ -68,9 +75,14 @@ export default function DepartmentHome({ role }) {
           <span className="brand-mark small">SC</span>
           <span>Supply Chain</span>
         </Link>
-        {user.role === "admin" && (
-          <nav aria-label="Workspace navigation" className="workspace-navigation">
-            {Object.entries(departmentContent).map(([department, details]) => (
+        <nav aria-label="Workspace navigation" className="workspace-navigation">
+            {Object.entries(departmentContent)
+              .filter(([department]) =>
+                user.roles.some((userRole) =>
+                  navigationRoles[department].includes(userRole),
+                ),
+              )
+              .map(([department, details]) => (
               <NavLink
                 key={department}
                 className={({ isActive }) =>
@@ -81,8 +93,7 @@ export default function DepartmentHome({ role }) {
                 {details.title}
               </NavLink>
             ))}
-          </nav>
-        )}
+        </nav>
         <div className="user-menu">
           <span>{user.full_name}</span>
           <button className="text-button" onClick={logout} type="button">
@@ -130,18 +141,34 @@ export default function DepartmentHome({ role }) {
               type="password"
               value={newUser.password}
             />
-            <label htmlFor="new-user-role">Department</label>
-            <select
-              id="new-user-role"
-              onChange={(event) =>
-                setNewUser({ ...newUser, role: event.target.value })
-              }
-              value={newUser.role}
-            >
-              <option value="purchasing">Purchasing</option>
-              <option value="warehouse">Warehouse</option>
-              <option value="accounting">Accounting</option>
-            </select>
+            <fieldset className="role-options">
+              <legend>Department roles</legend>
+              {[
+                ["purchasing", "Purchasing"],
+                ["warehouse", "Warehouse"],
+                ["accounting", "Accounting"],
+              ].map(([value, label]) => (
+                <label className="role-option" key={value}>
+                  <input
+                    checked={newUser.roles.includes(value)}
+                    onChange={(event) => {
+                      const roles = event.target.checked
+                        ? [...newUser.roles, value]
+                        : newUser.roles.filter((roleName) => roleName !== value);
+                      setNewUser({ ...newUser, roles });
+                    }}
+                    type="checkbox"
+                    value={value}
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+            {newUser.roles.length === 0 && (
+              <p className="form-error" role="alert">
+                Choose at least one department role.
+              </p>
+            )}
             {provisionError && (
               <p className="form-error" role="alert">
                 {provisionError}
@@ -152,7 +179,7 @@ export default function DepartmentHome({ role }) {
                 {provisionMessage}
               </p>
             )}
-            <button disabled={creatingUser} type="submit">
+            <button disabled={creatingUser || newUser.roles.length === 0} type="submit">
               {creatingUser ? "Creating account…" : "Create account"}
             </button>
           </form>

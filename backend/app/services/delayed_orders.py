@@ -23,9 +23,11 @@ async def check_delayed_orders(db_session: Session) -> None:
     if not delayed_orders:
         return
 
-    recipient_emails = db_session.exec(
-        select(User.email).where(User.role == UserRole.PURCHASING)
-    ).all()
+    recipient_emails = [
+        user.email
+        for user in db_session.exec(select(User)).all()
+        if UserRole.PURCHASING.value in user.roles
+    ]
     if not recipient_emails:
         logger.warning("Delayed purchase orders found, but no purchasing users exist")
         return

@@ -16,9 +16,14 @@ from app.models import User, UserRole  # noqa: E402
 
 def main() -> None:
     with Session(engine) as session:
-        existing_admin = session.exec(
-            select(User).where(User.role == UserRole.ADMIN)
-        ).first()
+        existing_admin = next(
+            (
+                user
+                for user in session.exec(select(User)).all()
+                if UserRole.ADMIN.value in user.roles
+            ),
+            None,
+        )
         if existing_admin is not None:
             print("An admin user already exists; no changes made.")
             return
@@ -35,7 +40,7 @@ def main() -> None:
             email=email,
             full_name="Administrator",
             hashed_password=hash_password(password),
-            role=UserRole.ADMIN,
+            roles=[UserRole.ADMIN.value],
         )
         session.add(admin)
         session.commit()
