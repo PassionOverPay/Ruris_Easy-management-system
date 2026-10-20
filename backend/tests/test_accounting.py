@@ -20,16 +20,23 @@ from app.services.currency import (
 
 
 class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
-    async def test_uses_bnr_rate_when_published_for_requested_date(self) -> None:
-        bnr_xml = b"""<DataSet><Body><Cube date="2026-10-19">
-        <Rate currency="EUR">5.3264</Rate></Cube></Body></DataSet>"""
-        bnr_response = httpx.Response(
+    async def test_uses_latest_ecb_rate_on_or_before_requested_date(self) -> None:
+        ecb_csv = (
+            "TIME_PERIOD,CURRENCY,CURRENCY_DENOM,OBS_VALUE\n"
+            "2026-10-16,RON,EUR,5.3310\n"
+            "2026-10-19,RON,EUR,5.3264\n"
+            "2026-10-21,RON,EUR,5.4000\n"
+        )
+        ecb_response = httpx.Response(
             200,
-            content=bnr_xml,
-            request=httpx.Request("GET", "https://www.bnr.ro/nbrfxrates.xml"),
+            text=ecb_csv,
+            request=httpx.Request(
+                "GET",
+                "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A",
+            ),
         )
         client = AsyncMock()
-        client.get.return_value = bnr_response
+        client.get.return_value = ecb_response
         async_client = AsyncMock()
         async_client.__aenter__.return_value = client
 
@@ -37,27 +44,36 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
             "app.services.currency.httpx.AsyncClient",
             return_value=async_client,
         ):
-            rate = await get_eur_to_ron_rate(date(2026, 10, 19))
+            rate = await get_eur_to_ron_rate(date(2026, 10, 20))
 
         self.assertEqual(rate, Decimal("5.3264"))
         client.get.assert_awaited_once()
+        self.assertEqual(
+            client.get.await_args.kwargs["params"],
+            {
+                "startPeriod": "2026-10-13",
+                "endPeriod": "2026-10-20",
+                "format": "csvdata",
+            },
+        )
 
-    async def test_uses_exact_historical_frankfurter_rate_when_bnr_date_differs(
+    async def test_uses_frankfurter_previous_rate_when_ecb_has_no_rate(
         self,
     ) -> None:
-        bnr_xml = b"""<DataSet><Body><Cube date="2026-10-19">
-        <Rate currency="EUR">5.3264</Rate></Cube></Body></DataSet>"""
-        bnr_response = httpx.Response(
+        ecb_response = httpx.Response(
             200,
-            content=bnr_xml,
-            request=httpx.Request("GET", "https://www.bnr.ro/nbrfxrates.xml"),
+            text="TIME_PERIOD,CURRENCY,CURRENCY_DENOM,OBS_VALUE\n",
+            request=httpx.Request(
+                "GET",
+                "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A",
+            ),
         )
         frankfurter_response = httpx.Response(
             200,
             json={
                 "amount": 1,
                 "base": "EUR",
-                "date": "2026-10-16",
+                "date": "2026-10-15",
                 "rates": {"RON": 5.331},
             },
             request=httpx.Request(
@@ -66,7 +82,7 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         client = AsyncMock()
-        client.get.side_effect = [bnr_response, frankfurter_response]
+        client.get.side_effect = [ecb_response, frankfurter_response]
         async_client = AsyncMock()
         async_client.__aenter__.return_value = client
 
@@ -84,9 +100,12 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_fails_if_neither_source_can_provide_rate(self) -> None:
-        bnr_response = httpx.Response(
+        ecb_response = httpx.Response(
             503,
-            request=httpx.Request("GET", "https://www.bnr.ro/nbrfxrates.xml"),
+            request=httpx.Request(
+                "GET",
+                "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A",
+            ),
         )
         frankfurter_response = httpx.Response(
             503,
@@ -96,7 +115,7 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         client = AsyncMock()
-        client.get.side_effect = [bnr_response, frankfurter_response]
+        client.get.side_effect = [ecb_response, frankfurter_response]
         async_client = AsyncMock()
         async_client.__aenter__.return_value = client
 
@@ -112,17 +131,20 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("No EUR/RON rate is available", str(error.exception))
         self.assertIn("No invoice was saved", str(error.exception))
 
-    async def test_rejects_non_matching_frankfurter_date(self) -> None:
-        bnr_response = httpx.Response(
+    async def test_rejects_future_frankfurter_date(self) -> None:
+        ecb_response = httpx.Response(
             503,
-            request=httpx.Request("GET", "https://www.bnr.ro/nbrfxrates.xml"),
+            request=httpx.Request(
+                "GET",
+                "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A",
+            ),
         )
         frankfurter_response = httpx.Response(
             200,
             json={
                 "amount": 1,
                 "base": "EUR",
-                "date": "2026-10-15",
+                "date": "2026-10-17",
                 "rates": {"RON": 5.2},
             },
             request=httpx.Request(
@@ -131,7 +153,7 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         client = AsyncMock()
-        client.get.side_effect = [bnr_response, frankfurter_response]
+        client.get.side_effect = [ecb_response, frankfurter_response]
         async_client = AsyncMock()
         async_client.__aenter__.return_value = client
 

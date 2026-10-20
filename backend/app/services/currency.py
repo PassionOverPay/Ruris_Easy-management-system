@@ -1,39 +1,36 @@
-import xml.etree.ElementTree as ET
-from datetime import date
+import csv
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from io import StringIO
 
 import httpx
 
-BNR_RATES_URL = "https://www.bnr.ro/nbrfxrates.xml"
+ECB_RATES_URL = "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A"
 FRANKFURTER_RATES_URL = "https://api.frankfurter.dev/v1"
 
 
 class ExchangeRateUnavailable(Exception):
-    """Raised when no trusted source provides the exact requested rate."""
+    """Raised when no trusted source provides a rate for or before the date."""
 
 
-def _bnr_eur_rate(xml_content: bytes) -> tuple[date, Decimal]:
-    root = ET.fromstring(xml_content)
-    for cube in root.iter("Cube"):
-        published_date = cube.get("date")
-        if published_date is None:
+def _ecb_eur_rate(csv_content: str, requested_date: date) -> Decimal:
+    latest_observation: tuple[date, Decimal] | None = None
+    for row in csv.DictReader(StringIO(csv_content)):
+        observation_date = date.fromisoformat(row["TIME_PERIOD"])
+        if observation_date > requested_date:
             continue
+        if row.get("CURRENCY") != "RON" or row.get("CURRENCY_DENOM") != "EUR":
+            raise ValueError("ECB returned an unexpected currency pair")
 
-        for rate in cube.findall(".//Rate"):
-            if rate.get("currency") != "EUR":
-                continue
-            value = Decimal(rate.text or "")
-            unit = Decimal(rate.get("unit", "1"))
-            if (
-                not value.is_finite()
-                or not unit.is_finite()
-                or value <= 0
-                or unit <= 0
-            ):
-                raise ValueError("BNR returned an invalid EUR rate")
-            return date.fromisoformat(published_date), value / unit
+        rate = Decimal(row["OBS_VALUE"])
+        if not rate.is_finite() or rate <= 0:
+            raise ValueError("ECB returned a non-positive EUR/RON rate")
+        if latest_observation is None or observation_date > latest_observation[0]:
+            latest_observation = (observation_date, rate)
 
-    raise ValueError("BNR response did not contain a dated EUR rate")
+    if latest_observation is None:
+        raise ValueError(f"ECB has no EUR/RON rate on or before {requested_date}")
+    return latest_observation[1]
 
 
 async def _frankfurter_eur_rate(
@@ -49,9 +46,9 @@ async def _frankfurter_eur_rate(
 
     try:
         returned_date = date.fromisoformat(data["date"])
-        if returned_date != requested_date:
+        if returned_date > requested_date:
             raise ValueError(
-                f"Frankfurter has no EUR/RON rate published for {requested_date}"
+                f"Frankfurter returned a rate later than {requested_date}"
             )
         if data["base"] != "EUR":
             raise ValueError("Frankfurter returned an unexpected base currency")
@@ -65,19 +62,23 @@ async def _frankfurter_eur_rate(
 
 
 async def get_eur_to_ron_rate(rate_date: date) -> Decimal:
-    """Return the EUR/RON rate published for this exact date, or fail clearly."""
+    """Return the latest published EUR/RON rate on or before the requested date."""
     failures: list[str] = []
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            response = await client.get(BNR_RATES_URL)
+            response = await client.get(
+                ECB_RATES_URL,
+                params={
+                    "startPeriod": (rate_date - timedelta(days=7)).isoformat(),
+                    "endPeriod": rate_date.isoformat(),
+                    "format": "csvdata",
+                },
+            )
             response.raise_for_status()
-            bnr_date, bnr_rate = _bnr_eur_rate(response.content)
-            if bnr_date == rate_date:
-                return bnr_rate
-            failures.append(f"BNR has a rate for {bnr_date}, not {rate_date}")
-        except (httpx.HTTPError, ET.ParseError, InvalidOperation, ValueError) as exc:
-            failures.append(f"BNR lookup failed: {exc}")
+            return _ecb_eur_rate(response.text, rate_date)
+        except (httpx.HTTPError, KeyError, InvalidOperation, ValueError) as exc:
+            failures.append(f"ECB lookup failed: {exc}")
 
         try:
             return await _frankfurter_eur_rate(client, rate_date)
