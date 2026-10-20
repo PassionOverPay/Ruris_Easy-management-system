@@ -9,6 +9,7 @@ from app.db.session import get_session
 from app.models import GoodsReceipt, PurchaseOrder, User, UserRole
 from app.schemas.goods_receipt import GoodsReceiptCreate, GoodsReceiptRead
 from app.services.audit import log_action
+from app.services.three_way_match import reconcile_po_invoices
 
 router = APIRouter()
 
@@ -57,6 +58,9 @@ def create_goods_receipt(
     )
     session.add(receipt)
     try:
+        session.flush()
+        if receipt.purchase_order_id is not None:
+            reconcile_po_invoices(receipt.purchase_order_id, session)
         session.commit()
     except IntegrityError as exc:
         session.rollback()

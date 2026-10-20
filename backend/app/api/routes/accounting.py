@@ -4,24 +4,20 @@ from decimal import Decimal, ROUND_HALF_UP
 from fastapi import Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
-from sqlalchemy import func
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
 from app.models import (
     Currency,
-    GoodsReceipt,
     Invoice,
-    InvoiceStatus,
     PurchaseOrder,
     User,
     UserRole,
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceRead
-from app.schemas.matching import MatchStatus
 from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
-from app.services.three_way_match import calculate_three_way_match
+from app.services.three_way_match import reconcile_po_invoices
 
 router = APIRouter()
 
@@ -48,7 +44,6 @@ async def create_invoice(
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="Authenticated user is invalid")
 
-    invoice_status = InvoiceStatus.PENDING
     if invoice_data.purchase_order_id is not None:
         purchase_order = session.get(PurchaseOrder, invoice_data.purchase_order_id)
         if purchase_order is None:
@@ -58,36 +53,6 @@ async def create_invoice(
                 status_code=400,
                 detail="Invoice currency must match the purchase order currency.",
             )
-
-        existing_invoiced = session.exec(
-            select(func.coalesce(func.sum(Invoice.amount_original), 0)).where(
-                Invoice.purchase_order_id == purchase_order.id
-            )
-        ).one()
-        cumulative_invoiced = Decimal(str(existing_invoiced)) + invoice_data.amount_original
-        price_variance = (
-            purchase_order.expected_total_original is not None
-            and cumulative_invoiced > Decimal(str(purchase_order.expected_total_original))
-        )
-
-        if price_variance:
-            invoice_status = InvoiceStatus.DISPUTED
-        else:
-            receipts = session.exec(
-                select(GoodsReceipt).where(
-                    GoodsReceipt.purchase_order_id == purchase_order.id
-                )
-            ).all()
-            if receipts:
-                match_result = calculate_three_way_match(purchase_order, receipts)
-                invoice_status = (
-                    InvoiceStatus.DISPUTED
-                    if any(
-                        item.status != MatchStatus.MATCHED
-                        for item in match_result.items
-                    )
-                    else InvoiceStatus.MATCHED
-                )
 
     if invoice_data.currency == Currency.EUR:
         try:
@@ -105,11 +70,13 @@ async def create_invoice(
         **invoice_data.model_dump(),
         exchange_rate=exchange_rate,
         amount_ron=amount_ron,
-        status=invoice_status,
         logged_by_id=current_user.id,
     )
     session.add(invoice)
     try:
+        session.flush()
+        if invoice.purchase_order_id is not None:
+            reconcile_po_invoices(invoice.purchase_order_id, session)
         session.commit()
     except IntegrityError as exc:
         session.rollback()

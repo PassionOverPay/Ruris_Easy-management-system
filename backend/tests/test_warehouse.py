@@ -1,4 +1,6 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -9,7 +11,17 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_session
 from app.main import app
-from app.models import AuditLog, GoodsReceipt, User, UserRole
+from app.models import (
+    AuditLog,
+    Currency,
+    GoodsReceipt,
+    Invoice,
+    InvoiceStatus,
+    PurchaseOrder,
+    PurchaseOrderStatus,
+    User,
+    UserRole,
+)
 
 
 class GoodsReceiptEndpointTests(unittest.TestCase):
@@ -96,6 +108,57 @@ class GoodsReceiptEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
+
+    def test_new_receipt_reconciles_existing_invoice_status(self) -> None:
+        order = PurchaseOrder(
+            po_number="PO-RECONCILE",
+            supplier_name="Supplier",
+            order_date=date(2026, 10, 1),
+            expected_delivery_date=date(2026, 10, 20),
+            currency="RON",
+            expected_total_original=100.0,
+            items_summary=[
+                {"item": "Laptop", "qty": 2, "unit_price": 50.0}
+            ],
+            created_by_id=self.warehouse_user.id,
+            status=PurchaseOrderStatus.ORDERED,
+        )
+        self.session.add(order)
+        self.session.commit()
+        self.session.refresh(order)
+        invoice = Invoice(
+            invoice_number="INV-RECONCILE",
+            purchase_order_id=order.id,
+            supplier_name="Supplier",
+            invoice_date=date(2026, 10, 20),
+            currency=Currency.RON,
+            amount_original=Decimal("100.00"),
+            exchange_rate=Decimal("1"),
+            amount_ron=Decimal("100.00"),
+            status=InvoiceStatus.DISPUTED,
+            match_notes="Disputed before receipt.",
+            logged_by_id=self.warehouse_user.id,
+        )
+        self.session.add(invoice)
+        self.session.commit()
+        self.session.refresh(invoice)
+
+        response = self.client.post(
+            "/api/v1/warehouse/receipts",
+            headers=self.headers,
+            json={
+                "purchase_order_id": order.id,
+                "items_received": [{"item": "Laptop", "qty": 2}],
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.session.refresh(invoice)
+        self.assertEqual(invoice.status, InvoiceStatus.MATCHED)
+        self.assertEqual(
+            invoice.match_notes,
+            "Auto-matched: Received quantity and price verified.",
+        )
 
     def test_receipt_creation_requires_warehouse_role(self) -> None:
         purchaser = User(

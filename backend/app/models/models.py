@@ -143,6 +143,7 @@ class Invoice(SQLModel, table=True):
             default=InvoiceStatus.PENDING,
         ),
     )
+    match_notes: str | None = Field(default=None)
     logged_by_id: int = Field(foreign_key="users.id")
 
 

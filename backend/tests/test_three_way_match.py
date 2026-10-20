@@ -64,9 +64,9 @@ class ThreeWayMatchTests(unittest.TestCase):
             order_date=date(2026, 1, 1),
             expected_delivery_date=date(2026, 1, 10),
             items_summary=[
-                {"item": "Laptop", "qty": 10},
-                {"item": "Mouse", "qty": 4},
-                {"item": "Monitor", "qty": 2},
+                {"item": "Laptop", "qty": 10, "unit_price": 25.0, "currency": "RON"},
+                {"item": "Mouse", "qty": 4, "unit_price": 5.0, "currency": "RON"},
+                {"item": "Monitor", "qty": 2, "unit_price": 100.0, "currency": "RON"},
             ],
             created_by_id=self.user_id,
         )

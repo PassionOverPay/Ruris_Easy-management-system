@@ -233,7 +233,14 @@ class InvoiceEndpointTests(unittest.TestCase):
             supplier_name="Supplier",
             order_date=date(2026, 10, 1),
             expected_delivery_date=date(2026, 10, 20),
-            items_summary=[{"item": "Laptop", "qty": 2}],
+            items_summary=[
+                {
+                    "item": "Laptop",
+                    "qty": 2,
+                    "unit_price": 50.0,
+                    "currency": "RON",
+                }
+            ],
             expected_total_original=100.0,
             status=PurchaseOrderStatus.ORDERED,
             created_by_id=self.user_id,
@@ -336,6 +343,10 @@ class InvoiceEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["status"], "matched")
+        self.assertEqual(
+            response.json()["match_notes"],
+            "Auto-matched: Received quantity and price verified.",
+        )
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.status, InvoiceStatus.MATCHED)
 
@@ -353,6 +364,28 @@ class InvoiceEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["status"], "disputed")
+        self.assertEqual(
+            response.json()["match_notes"],
+            "Disputed: Received quantities do not match the purchase order.",
+        )
+
+    def test_invoice_creation_reconciles_against_current_received_value(self) -> None:
+        order = self.create_purchase_order()
+        payload = self.invoice_payload("RON")
+        payload["purchase_order_id"] = order.id
+
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["status"], "disputed")
+        self.assertEqual(
+            response.json()["match_notes"],
+            "Disputed: Cumulative invoice total (100.00) exceeds received goods value (0).",
+        )
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.status, InvoiceStatus.DISPUTED)
 

@@ -33,4 +33,5 @@ class InvoiceRead(SQLModel):
     exchange_rate: Decimal
     amount_ron: Decimal
     status: InvoiceStatus
+    match_notes: str | None
     logged_by_id: int

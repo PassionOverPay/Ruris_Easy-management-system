@@ -38,12 +38,18 @@ function InvoiceRows({ invoices }) {
               </td>
               <td className="whitespace-nowrap px-3 py-3">
                 <span
+                  title={invoice.match_notes || undefined}
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
                     decisionStyles[invoice.status] || "bg-slate-100 text-slate-700"
                   }`}
                 >
                   {invoice.status}
                 </span>
+                {invoice.match_notes && (
+                  <p className="mt-1 max-w-xs whitespace-normal text-xs text-slate-500">
+                    {invoice.match_notes}
+                  </p>
+                )}
               </td>
             </tr>
           ))}
