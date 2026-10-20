@@ -10,7 +10,16 @@ from sqlmodel.pool import StaticPool
 
 from app.db.session import get_session
 from app.main import app
-from app.models import AuditLog, Invoice, User, UserRole
+from app.models import (
+    AuditLog,
+    GoodsReceipt,
+    Invoice,
+    InvoiceStatus,
+    PurchaseOrder,
+    PurchaseOrderStatus,
+    User,
+    UserRole,
+)
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.services.currency import (
@@ -218,6 +227,36 @@ class InvoiceEndpointTests(unittest.TestCase):
             "amount_original": "100.00",
         }
 
+    def create_purchase_order(self) -> PurchaseOrder:
+        order = PurchaseOrder(
+            po_number="PO-MATCH-001",
+            supplier_name="Supplier",
+            order_date=date(2026, 10, 1),
+            expected_delivery_date=date(2026, 10, 20),
+            items_summary=[{"item": "Laptop", "qty": 2}],
+            status=PurchaseOrderStatus.ORDERED,
+            created_by_id=self.user_id,
+        )
+        self.session.add(order)
+        self.session.commit()
+        self.session.refresh(order)
+        return order
+
+    def create_receipt(
+        self,
+        order: PurchaseOrder,
+        items: list[dict[str, object]],
+    ) -> None:
+        self.session.add(
+            GoodsReceipt(
+                receipt_number="REC-MATCH-001",
+                purchase_order_id=order.id,
+                received_by_id=self.user_id,
+                items_received=items,
+            )
+        )
+        self.session.commit()
+
     def test_eur_invoice_fetches_rate_and_saves_converted_amount(self) -> None:
         with patch(
             "app.api.routes.accounting.get_eur_to_ron_rate",
@@ -233,10 +272,12 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["exchange_rate"], "5.331000")
         self.assertEqual(response.json()["amount_ron"], "533.10")
+        self.assertEqual(response.json()["status"], "pending")
         self.assertEqual(response.json()["logged_by_id"], self.user_id)
         get_rate.assert_awaited_once_with(date(2026, 10, 16))
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.amount_ron, Decimal("533.10"))
+        self.assertEqual(saved.status, InvoiceStatus.PENDING)
         audit = self.session.exec(select(AuditLog)).one()
         self.assertEqual(audit.action, "create")
         self.assertEqual(audit.entity_name, "Invoice")
@@ -277,7 +318,42 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["exchange_rate"], "1.000000")
         self.assertEqual(response.json()["amount_ron"], "100.00")
+        self.assertEqual(response.json()["status"], "pending")
         get_rate.assert_not_awaited()
+
+    def test_invoice_is_matched_when_receipt_quantities_match_order(self) -> None:
+        order = self.create_purchase_order()
+        self.create_receipt(order, [{"item": "Laptop", "qty": 2}])
+        payload = self.invoice_payload("RON")
+        payload["purchase_order_id"] = order.id
+
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["status"], "matched")
+        saved = self.session.exec(select(Invoice)).one()
+        self.assertEqual(saved.status, InvoiceStatus.MATCHED)
+
+    def test_invoice_is_disputed_when_receipt_quantities_differ(self) -> None:
+        order = self.create_purchase_order()
+        self.create_receipt(order, [{"item": "Laptop", "qty": 1}])
+        payload = self.invoice_payload("RON")
+        payload["purchase_order_id"] = order.id
+
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["status"], "disputed")
+        saved = self.session.exec(select(Invoice)).one()
+        self.assertEqual(saved.status, InvoiceStatus.DISPUTED)
 
     def test_accounting_user_can_list_invoice_history(self) -> None:
         response = self.client.get(

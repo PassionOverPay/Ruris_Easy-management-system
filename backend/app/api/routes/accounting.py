@@ -7,10 +7,20 @@ from sqlmodel import Session, desc, select
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
-from app.models import Currency, Invoice, User, UserRole
+from app.models import (
+    Currency,
+    GoodsReceipt,
+    Invoice,
+    InvoiceStatus,
+    PurchaseOrder,
+    User,
+    UserRole,
+)
 from app.schemas.invoice import InvoiceCreate, InvoiceRead
+from app.schemas.matching import MatchStatus
 from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
+from app.services.three_way_match import calculate_three_way_match
 
 router = APIRouter()
 
@@ -37,6 +47,26 @@ async def create_invoice(
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="Authenticated user is invalid")
 
+    invoice_status = InvoiceStatus.PENDING
+    if invoice_data.purchase_order_id is not None:
+        purchase_order = session.get(PurchaseOrder, invoice_data.purchase_order_id)
+        if purchase_order is not None:
+            receipts = session.exec(
+                select(GoodsReceipt).where(
+                    GoodsReceipt.purchase_order_id == purchase_order.id
+                )
+            ).all()
+            if receipts:
+                match_result = calculate_three_way_match(purchase_order, receipts)
+                invoice_status = (
+                    InvoiceStatus.DISPUTED
+                    if any(
+                        item.status != MatchStatus.MATCHED
+                        for item in match_result.items
+                    )
+                    else InvoiceStatus.MATCHED
+                )
+
     if invoice_data.currency == Currency.EUR:
         try:
             exchange_rate = await get_eur_to_ron_rate(invoice_data.invoice_date)
@@ -53,6 +83,7 @@ async def create_invoice(
         **invoice_data.model_dump(),
         exchange_rate=exchange_rate,
         amount_ron=amount_ron,
+        status=invoice_status,
         logged_by_id=current_user.id,
     )
     session.add(invoice)
