@@ -4,6 +4,7 @@ import api from "../api/axios";
 import { useAuth } from "../auth/AuthContext";
 import CreatePOForm from "../components/CreatePOForm";
 import CreateReceiptForm from "../components/CreateReceiptForm";
+import InvoiceProcessing from "../components/InvoiceProcessing";
 
 const departmentContent = {
   admin: {
@@ -109,6 +110,7 @@ export default function DepartmentHome({ role }) {
         <p>{content.description}</p>
         {role === "purchasing" && <CreatePOForm />}
         {role === "warehouse" && <CreateReceiptForm />}
+        {role === "accounting" && <InvoiceProcessing />}
         {role === "admin" && (
           <form className="provision-form" onSubmit={handleProvision}>
             <h2>Create a team account</h2>

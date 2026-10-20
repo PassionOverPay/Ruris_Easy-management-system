@@ -17,7 +17,9 @@ router = APIRouter()
 def get_purchase_order_match(
     purchase_order_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(RequireRole([UserRole.PURCHASING])),
+    current_user: User = Depends(
+        RequireRole([UserRole.PURCHASING, UserRole.ACCOUNTING])
+    ),
 ) -> ThreeWayMatch:
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="Authenticated user is invalid")

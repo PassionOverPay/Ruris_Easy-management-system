@@ -152,6 +152,36 @@ class ThreeWayMatchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "Purchase order not found")
 
+    def test_accounting_user_can_review_purchase_order_match(self) -> None:
+        purchase_order = PurchaseOrder(
+            po_number="PO-ACCOUNTING-001",
+            supplier_name="Supplier",
+            order_date=date(2026, 10, 1),
+            expected_delivery_date=date(2026, 10, 15),
+            items_summary=[{"item": "Laptop", "qty": 2}],
+            created_by_id=self.user_id,
+        )
+        accountant = User(
+            email="accountant@example.com",
+            full_name="Accountant",
+            hashed_password=hash_password("accounting-password"),
+            roles=[UserRole.ACCOUNTING.value],
+        )
+        self.session.add_all([purchase_order, accountant])
+        self.session.commit()
+        self.session.refresh(purchase_order)
+        self.session.refresh(accountant)
+        token = create_access_token(str(accountant.id), accountant.roles)
+
+        response = self.client.get(
+            f"/api/v1/purchasing/{purchase_order.id}/match",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["purchase_order_id"], purchase_order.id)
+        self.assertEqual(response.json()["items"][0]["ordered_quantity"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
