@@ -20,8 +20,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-supply_chain}:${POSTGRES_PASSWORD:-local_dev_password}@db:5432/${POSTGRES_DB:-supply_chain}
-      DATABASE_URL_UNPOOLED: postgresql+psycopg://${POSTGRES_USER:-supply_chain}:${POSTGRES_PASSWORD:-local_dev_password}@db:5432/${POSTGRES_DB:-supply_chain}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-supply_chain}:${POSTGRES_PASSWORD:-local_dev_password}@db:5432/${POSTGRES_DB:-supply_chain}}
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_UNPOOLED:-postgresql+psycopg://${POSTGRES_USER:-supply_chain}:${POSTGRES_PASSWORD:-local_dev_password}@db:5432/${POSTGRES_DB:-supply_chain}}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY before starting the containers}
       CORS_ORIGINS: '["http://localhost","http://127.0.0.1"]'
       SMTP_HOST: ${SMTP_HOST:-}
@@ -51,7 +51,7 @@ services:
       dockerfile: backend/Dockerfile
     command: ["python", "-m", "app.worker"]
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-supply_chain}:${POSTGRES_PASSWORD:-local_dev_password}@db:5432/${POSTGRES_DB:-supply_chain}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-supply_chain}:${POSTGRES_PASSWORD:-local_dev_password}@db:5432/${POSTGRES_DB:-supply_chain}}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY before starting the containers}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}

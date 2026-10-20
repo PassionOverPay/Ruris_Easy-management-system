@@ -57,15 +57,21 @@ manifest remains dedicated to Neon CLI configuration.
 
 Docker Compose runs a local PostgreSQL database, the FastAPI API, the separate
 daily email worker, and the Nginx-served frontend. The default PostgreSQL
-credentials in Compose are for local development only. Set a strong
-`JWT_SECRET_KEY` in the shell before starting containers. SMTP settings are
-optional until delayed-order email alerts are needed.
+credentials in Compose are for local development only; `DATABASE_URL` and
+`DATABASE_URL_UNPOOLED` from `.env.local` take precedence when set, and the
+local database URLs are used as fallbacks. Set a strong
+`JWT_SECRET_KEY` in the root `.env.local` before starting containers. SMTP
+settings in the same file are optional until delayed-order email alerts are
+needed. Pass `.env.local` to Compose with `--env-file`; Compose does not
+automatically load files with that name.
 
 ```powershell
-$env:JWT_SECRET_KEY = "<generate-a-random-secret-of-at-least-32-bytes>"
-docker compose up --build -d
-docker compose run --rm backend python -m alembic -c alembic.ini upgrade head
+docker compose --env-file .env.local up --build -d
+docker compose --env-file .env.local run --rm backend python -m alembic -c alembic.ini upgrade head
 ```
+
+After changing `.env.local`, run `docker compose --env-file .env.local up -d` so
+Compose recreates containers with the updated environment.
 
 Open `http://localhost`. The API is also available at `http://localhost:8000`.
 Nginx forwards `/api/` and `/token` to the backend and falls back to
