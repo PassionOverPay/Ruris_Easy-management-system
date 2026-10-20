@@ -20,7 +20,8 @@ export default function CreatePOForm() {
       supplier_name: "",
       order_date: todayAsDateInput(),
       expected_delivery_date: "",
-      items_summary: [{ item: "", qty: 1 }],
+      currency: "RON",
+      items_summary: [{ item: "", qty: 1, unit_price: "" }],
     },
   });
   const { append, fields, remove } = useFieldArray({
@@ -34,9 +35,11 @@ export default function CreatePOForm() {
       supplier_name: values.supplier_name.trim(),
       order_date: values.order_date,
       expected_delivery_date: values.expected_delivery_date,
-      items_summary: values.items_summary.map(({ item, qty }) => ({
+      currency: values.currency,
+      items_summary: values.items_summary.map(({ item, qty, unit_price }) => ({
         item: item.trim(),
         qty: Number(qty),
+        unit_price: Number(unit_price),
       })),
     };
 
@@ -51,7 +54,8 @@ export default function CreatePOForm() {
         supplier_name: "",
         order_date: todayAsDateInput(),
         expected_delivery_date: "",
-        items_summary: [{ item: "", qty: 1 }],
+        currency: "RON",
+        items_summary: [{ item: "", qty: 1, unit_price: "" }],
       });
     } catch (error) {
       const status = error.response?.status;
@@ -151,6 +155,19 @@ export default function CreatePOForm() {
             </p>
           )}
         </div>
+        <div>
+          <label className={labelClass} htmlFor="purchase-order-currency">
+            Order currency
+          </label>
+          <select
+            className={inputClass}
+            id="purchase-order-currency"
+            {...register("currency", { required: "Choose an order currency." })}
+          >
+            <option value="RON">RON</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
       </div>
 
       <fieldset className="space-y-3">
@@ -159,7 +176,7 @@ export default function CreatePOForm() {
         </legend>
         {fields.map((field, index) => (
           <div
-            className="grid gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end"
+            className="grid gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_auto] sm:items-end"
             key={field.id}
           >
             <div>
@@ -177,6 +194,28 @@ export default function CreatePOForm() {
               {errors.items_summary?.[index]?.item && (
                 <p className="mt-1 text-sm text-red-700" role="alert">
                   {errors.items_summary[index].item.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className={labelClass} htmlFor={`item-price-${field.id}`}>
+                Unit price
+              </label>
+              <input
+                className={inputClass}
+                id={`item-price-${field.id}`}
+                min="0.01"
+                step="0.01"
+                type="number"
+                {...register(`items_summary.${index}.unit_price`, {
+                  required: "Enter a unit price.",
+                  valueAsNumber: true,
+                  min: { value: 0.01, message: "Price must be greater than 0." },
+                })}
+              />
+              {errors.items_summary?.[index]?.unit_price && (
+                <p className="mt-1 text-sm text-red-700" role="alert">
+                  {errors.items_summary[index].unit_price.message}
                 </p>
               )}
             </div>
@@ -216,7 +255,7 @@ export default function CreatePOForm() {
         ))}
         <button
           className="rounded-lg border border-emerald-800 px-3 py-2 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50"
-          onClick={() => append({ item: "", qty: 1 })}
+          onClick={() => append({ item: "", qty: 1, unit_price: "" })}
           type="button"
         >
           Add item

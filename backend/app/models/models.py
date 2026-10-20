@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import Column, Enum as SQLAlchemyEnum, JSON, Numeric
+from sqlalchemy import Column, Enum as SQLAlchemyEnum, Float, JSON, Numeric, String
 from sqlmodel import Field, SQLModel
 
 
@@ -57,6 +57,14 @@ class PurchaseOrder(SQLModel, table=True):
     supplier_name: str
     order_date: date
     expected_delivery_date: date
+    currency: str = Field(
+        default="RON",
+        sa_column=Column(String(length=3), nullable=False, default="RON"),
+    )
+    expected_total_original: float | None = Field(
+        default=None,
+        sa_column=Column(Float, nullable=True),
+    )
     items_summary: list[dict[str, Any]] = Field(
         default_factory=list,
         sa_type=JSON,

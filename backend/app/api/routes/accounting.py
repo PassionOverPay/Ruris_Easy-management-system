@@ -4,6 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from fastapi import Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
+from sqlalchemy import func
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
@@ -50,7 +51,28 @@ async def create_invoice(
     invoice_status = InvoiceStatus.PENDING
     if invoice_data.purchase_order_id is not None:
         purchase_order = session.get(PurchaseOrder, invoice_data.purchase_order_id)
-        if purchase_order is not None:
+        if purchase_order is None:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        if invoice_data.currency.value != purchase_order.currency:
+            raise HTTPException(
+                status_code=400,
+                detail="Invoice currency must match the purchase order currency.",
+            )
+
+        existing_invoiced = session.exec(
+            select(func.coalesce(func.sum(Invoice.amount_original), 0)).where(
+                Invoice.purchase_order_id == purchase_order.id
+            )
+        ).one()
+        cumulative_invoiced = Decimal(str(existing_invoiced)) + invoice_data.amount_original
+        price_variance = (
+            purchase_order.expected_total_original is not None
+            and cumulative_invoiced > Decimal(str(purchase_order.expected_total_original))
+        )
+
+        if price_variance:
+            invoice_status = InvoiceStatus.DISPUTED
+        else:
             receipts = session.exec(
                 select(GoodsReceipt).where(
                     GoodsReceipt.purchase_order_id == purchase_order.id

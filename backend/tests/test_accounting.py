@@ -234,6 +234,7 @@ class InvoiceEndpointTests(unittest.TestCase):
             order_date=date(2026, 10, 1),
             expected_delivery_date=date(2026, 10, 20),
             items_summary=[{"item": "Laptop", "qty": 2}],
+            expected_total_original=100.0,
             status=PurchaseOrderStatus.ORDERED,
             created_by_id=self.user_id,
         )
@@ -354,6 +355,62 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "disputed")
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.status, InvoiceStatus.DISPUTED)
+
+    def test_cumulative_invoices_over_po_total_are_disputed(self) -> None:
+        order = self.create_purchase_order()
+        self.create_receipt(order, [{"item": "Laptop", "qty": 2}])
+        first_payload = self.invoice_payload("RON")
+        first_payload.update(
+            invoice_number="INV-UNDER",
+            purchase_order_id=order.id,
+            amount_original="60.00",
+        )
+        first_response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=first_payload,
+            headers=self.headers,
+        )
+        self.assertEqual(first_response.status_code, 201, first_response.text)
+        self.assertEqual(first_response.json()["status"], "matched")
+
+        second_payload = self.invoice_payload("RON")
+        second_payload.update(
+            invoice_number="INV-OVER",
+            purchase_order_id=order.id,
+            amount_original="50.00",
+        )
+        second_response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=second_payload,
+            headers=self.headers,
+        )
+
+        self.assertEqual(second_response.status_code, 201, second_response.text)
+        self.assertEqual(second_response.json()["status"], "disputed")
+        self.assertEqual(
+            self.session.exec(
+                select(Invoice).where(Invoice.invoice_number == "INV-OVER")
+            ).one().status,
+            InvoiceStatus.DISPUTED,
+        )
+
+    def test_invoice_currency_must_match_purchase_order(self) -> None:
+        order = self.create_purchase_order()
+        order.currency = "EUR"
+        self.session.add(order)
+        self.session.commit()
+        payload = self.invoice_payload("RON")
+        payload["purchase_order_id"] = order.id
+
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("currency must match", response.json()["detail"])
+        self.assertEqual(self.session.exec(select(Invoice)).all(), [])
 
     def test_accounting_user_can_list_invoice_history(self) -> None:
         response = self.client.get(

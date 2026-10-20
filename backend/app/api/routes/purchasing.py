@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
@@ -82,6 +83,23 @@ def create_purchase_order(
         order_values["po_number"] = (
             f"PO-{timestamp.year}-{timestamp.strftime('%Y%m%d%H%M%S%f')}"
         )
+    order_values["currency"] = order_data.currency.value
+    order_values["items_summary"] = [
+        {
+            **item.model_dump(exclude={"unit_price"}),
+            "unit_price": float(item.unit_price),
+        }
+        for item in order_data.items_summary
+    ]
+    order_values["expected_total_original"] = float(
+        sum(
+            (
+                Decimal(item.qty) * item.unit_price
+                for item in order_data.items_summary
+            ),
+            start=Decimal("0"),
+        )
+    )
 
     order = PurchaseOrder(
         **order_values,

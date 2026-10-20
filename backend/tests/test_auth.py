@@ -107,12 +107,18 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
                 "supplier_name": "Supplier",
                 "order_date": "2026-10-19",
                 "expected_delivery_date": "2026-10-26",
-                "items_summary": [{"item": "Laptop", "qty": 2}],
+                "currency": "EUR",
+                "items_summary": [
+                    {"item": "Laptop", "qty": 2, "unit_price": "125.50"}
+                ],
             },
         )
 
         self.assertEqual(response.status_code, 201, response.text)
         order = self.session.exec(select(PurchaseOrder)).one()
+        self.assertEqual(order.currency, "EUR")
+        self.assertEqual(order.expected_total_original, 251.0)
+        self.assertEqual(response.json()["expected_total_original"], 251.0)
         self.assertEqual(order.created_by_id, self.purchaser.id)
         logs = self.session.exec(select(AuditLog)).all()
         self.assertEqual(
@@ -130,7 +136,9 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
                 "supplier_name": "Supplier",
                 "order_date": "2026-10-19",
                 "expected_delivery_date": "2026-10-26",
-                "items_summary": [{"item": "Laptop", "qty": 2}],
+                "items_summary": [
+                    {"item": "Laptop", "qty": 2, "unit_price": 15.25}
+                ],
             },
         )
 
