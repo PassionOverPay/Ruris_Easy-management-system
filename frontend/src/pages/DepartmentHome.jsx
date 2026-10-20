@@ -3,6 +3,7 @@ import { Link, NavLink } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../auth/AuthContext";
 import CreatePOForm from "../components/CreatePOForm";
+import CreateReceiptForm from "../components/CreateReceiptForm";
 
 const departmentContent = {
   admin: {
@@ -107,6 +108,7 @@ export default function DepartmentHome({ role }) {
         <h1>{content.title}</h1>
         <p>{content.description}</p>
         {role === "purchasing" && <CreatePOForm />}
+        {role === "warehouse" && <CreateReceiptForm />}
         {role === "admin" && (
           <form className="provision-form" onSubmit={handleProvision}>
             <h2>Create a team account</h2>
