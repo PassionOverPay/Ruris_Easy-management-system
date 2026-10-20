@@ -99,7 +99,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
     def test_purchasing_role_can_create_and_audit_purchase_order(self) -> None:
         token = self.token_for("buyer@example.com", "buyer-password")
         response = self.client.post(
-            "/api/v1/purchasing",
+            "/api/v1/purchasing/orders",
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "po_number": "PO-AUTH-001",

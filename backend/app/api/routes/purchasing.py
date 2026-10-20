@@ -42,6 +42,7 @@ def get_purchase_order_match(
 
 
 @router.post("", response_model=PurchaseOrderRead, status_code=201)
+@router.post("/orders", response_model=PurchaseOrderRead, status_code=201)
 def create_purchase_order(
     order_data: PurchaseOrderCreate,
     session: Session = Depends(get_session),

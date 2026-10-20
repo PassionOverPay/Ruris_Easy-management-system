@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../auth/AuthContext";
+import CreatePOForm from "../components/CreatePOForm";
 
 const departmentContent = {
   admin: {
@@ -105,6 +106,7 @@ export default function DepartmentHome({ role }) {
         <p className="eyebrow">{role.toUpperCase()} WORKSPACE</p>
         <h1>{content.title}</h1>
         <p>{content.description}</p>
+        {role === "purchasing" && <CreatePOForm />}
         {role === "admin" && (
           <form className="provision-form" onSubmit={handleProvision}>
             <h2>Create a team account</h2>
