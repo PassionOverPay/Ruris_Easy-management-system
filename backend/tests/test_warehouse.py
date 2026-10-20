@@ -60,7 +60,6 @@ class GoodsReceiptEndpointTests(unittest.TestCase):
             "/api/v1/warehouse/receipts",
             headers=self.headers,
             json={
-                "receipt_number": "GR-001",
                 "purchase_order_id": None,
                 "notes": "One box was damaged.",
                 "items_received": [
@@ -71,6 +70,10 @@ class GoodsReceiptEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
+        self.assertRegex(
+            response.json()["receipt_number"],
+            r"^REC-2026-\d{20}$",
+        )
         self.assertIsNone(response.json()["purchase_order_id"])
         self.assertEqual(response.json()["notes"], "One box was damaged.")
         self.assertEqual(

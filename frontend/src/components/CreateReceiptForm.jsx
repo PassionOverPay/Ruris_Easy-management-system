@@ -13,7 +13,6 @@ export default function CreateReceiptForm() {
     reset,
   } = useForm({
     defaultValues: {
-      receipt_number: "",
       purchase_order_id: "",
       notes: "",
       items_received: [{ item: "", qty: 1 }],
@@ -39,7 +38,6 @@ export default function CreateReceiptForm() {
 
   async function submitReceipt(values) {
     const payload = {
-      receipt_number: values.receipt_number.trim(),
       purchase_order_id:
         values.purchase_order_id === "" || values.purchase_order_id === null
           ? null
@@ -56,10 +54,9 @@ export default function CreateReceiptForm() {
       const response = await api.post("/api/v1/warehouse/receipts", payload);
       setSubmissionMessage({
         type: "success",
-        text: `Goods receipt ${response.data.receipt_number} logged successfully.`,
+        text: `Receipt logged successfully with ID: ${response.data.receipt_number}!`,
       });
       reset({
-        receipt_number: "",
         purchase_order_id: "",
         notes: "",
         items_received: [{ item: "", qty: 1 }],
@@ -112,25 +109,6 @@ export default function CreateReceiptForm() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelClass} htmlFor="receipt-number">
-            Receipt number
-          </label>
-          <input
-            className={inputClass}
-            id="receipt-number"
-            placeholder="GR-2026-001"
-            {...register("receipt_number", {
-              required: "Enter a receipt number.",
-            })}
-          />
-          {errors.receipt_number && (
-            <p className="mt-1 text-sm text-red-700" role="alert">
-              {errors.receipt_number.message}
-            </p>
-          )}
-        </div>
-
         <div>
           <label className={labelClass} htmlFor="purchase-order-id">
             Purchase order <span className="font-normal text-slate-500">(optional)</span>

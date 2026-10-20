@@ -6,7 +6,7 @@ from sqlmodel import Field, SQLModel
 
 
 class GoodsReceiptCreate(SQLModel):
-    receipt_number: str = Field(min_length=1, max_length=100)
+    receipt_number: str | None = Field(default=None, min_length=1, max_length=100)
     purchase_order_id: int | None = Field(default=None, gt=0)
     items_received: list[dict[str, Any]] = Field(min_length=1)
     notes: str | None = None

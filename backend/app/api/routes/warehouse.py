@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
@@ -26,8 +28,15 @@ def create_goods_receipt(
     ):
         raise HTTPException(status_code=404, detail="Purchase order not found")
 
+    receipt_values = receipt_data.model_dump()
+    if not receipt_values["receipt_number"]:
+        timestamp = datetime.now(UTC)
+        receipt_values["receipt_number"] = (
+            f"REC-{timestamp.year}-{timestamp.strftime('%Y%m%d%H%M%S%f')}"
+        )
+
     receipt = GoodsReceipt(
-        **receipt_data.model_dump(),
+        **receipt_values,
         received_by_id=current_user.id,
     )
     session.add(receipt)
