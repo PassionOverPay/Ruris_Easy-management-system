@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import api from "../api/axios";
 
 export default function CreateReceiptForm() {
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [purchaseOrdersError, setPurchaseOrdersError] = useState("");
   const {
     control,
     formState: { errors, isSubmitting },
@@ -22,6 +24,18 @@ export default function CreateReceiptForm() {
     name: "items_received",
   });
   const [submissionMessage, setSubmissionMessage] = useState(null);
+
+  useEffect(() => {
+    async function loadPurchaseOrders() {
+      try {
+        const response = await api.get("/api/v1/purchasing/orders");
+        setPurchaseOrders(response.data);
+      } catch {
+        setPurchaseOrdersError("Purchase orders could not be loaded.");
+      }
+    }
+    void loadPurchaseOrders();
+  }, []);
 
   async function submitReceipt(values) {
     const payload = {
@@ -119,25 +133,25 @@ export default function CreateReceiptForm() {
 
         <div>
           <label className={labelClass} htmlFor="purchase-order-id">
-            Purchase order ID <span className="font-normal text-slate-500">(optional)</span>
+            Purchase order <span className="font-normal text-slate-500">(optional)</span>
           </label>
-          <input
+          <select
             className={inputClass}
             id="purchase-order-id"
-            min="1"
-            placeholder="e.g. 42"
-            type="number"
             {...register("purchase_order_id", {
               setValueAs: (value) => (value === "" ? null : Number(value)),
-              validate: (value) =>
-                value === null ||
-                (Number.isSafeInteger(value) && value > 0) ||
-                "Enter a valid positive purchase order ID.",
             })}
-          />
-          {errors.purchase_order_id && (
+          >
+            <option value="">-- None / Unsolicited Shipment --</option>
+            {purchaseOrders.map((po) => (
+              <option key={po.id} value={po.id}>
+                {po.po_number} - {po.supplier_name} ({po.order_date})
+              </option>
+            ))}
+          </select>
+          {purchaseOrdersError && (
             <p className="mt-1 text-sm text-red-700" role="alert">
-              {errors.purchase_order_id.message}
+              {purchaseOrdersError}
             </p>
           )}
         </div>

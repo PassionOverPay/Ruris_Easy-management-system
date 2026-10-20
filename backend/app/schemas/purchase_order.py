@@ -8,7 +8,7 @@ from app.models import PurchaseOrderStatus
 
 
 class PurchaseOrderCreate(SQLModel):
-    po_number: str = Field(min_length=1, max_length=100)
+    po_number: str | None = Field(default=None, min_length=1, max_length=100)
     supplier_name: str = Field(min_length=1, max_length=255)
     order_date: date
     expected_delivery_date: date

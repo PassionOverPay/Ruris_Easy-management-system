@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, desc, select
+from datetime import UTC, datetime
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
@@ -11,6 +12,28 @@ from app.services.audit import log_action
 from app.services.three_way_match import calculate_three_way_match
 
 router = APIRouter()
+
+
+@router.get("/orders", response_model=list[PurchaseOrderRead])
+def list_purchase_orders(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(
+        RequireRole(
+            [
+                UserRole.PURCHASING,
+                UserRole.WAREHOUSE,
+                UserRole.ACCOUNTING,
+                UserRole.ADMIN,
+            ]
+        )
+    ),
+) -> list[PurchaseOrder]:
+    return session.exec(
+        select(PurchaseOrder).order_by(
+            desc(PurchaseOrder.order_date),
+            desc(PurchaseOrder.id),
+        )
+    ).all()
 
 
 @router.get("/{purchase_order_id}/match", response_model=ThreeWayMatch)
@@ -53,8 +76,15 @@ def create_purchase_order(
     if current_user.id is None:
         raise HTTPException(status_code=401, detail="Authenticated user is invalid")
 
+    order_values = order_data.model_dump()
+    if not order_values["po_number"]:
+        timestamp = datetime.now(UTC)
+        order_values["po_number"] = (
+            f"PO-{timestamp.year}-{timestamp.strftime('%Y%m%d%H%M%S%f')}"
+        )
+
     order = PurchaseOrder(
-        **order_data.model_dump(),
+        **order_values,
         created_by_id=current_user.id,
     )
     session.add(order)

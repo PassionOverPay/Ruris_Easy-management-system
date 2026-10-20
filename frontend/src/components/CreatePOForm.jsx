@@ -17,7 +17,6 @@ export default function CreatePOForm() {
     reset,
   } = useForm({
     defaultValues: {
-      po_number: "",
       supplier_name: "",
       order_date: todayAsDateInput(),
       expected_delivery_date: "",
@@ -32,7 +31,6 @@ export default function CreatePOForm() {
 
   async function submitPurchaseOrder(values) {
     const payload = {
-      po_number: values.po_number.trim(),
       supplier_name: values.supplier_name.trim(),
       order_date: values.order_date,
       expected_delivery_date: values.expected_delivery_date,
@@ -47,10 +45,9 @@ export default function CreatePOForm() {
       const response = await api.post("/api/v1/purchasing/orders", payload);
       setSubmissionMessage({
         type: "success",
-        text: `Purchase order ${response.data.po_number} created successfully.`,
+        text: `Purchase Order created successfully as ${response.data.po_number}!`,
       });
       reset({
-        po_number: "",
         supplier_name: "",
         order_date: todayAsDateInput(),
         expected_delivery_date: "",
@@ -100,23 +97,6 @@ export default function CreatePOForm() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelClass} htmlFor="po-number">
-            PO number
-          </label>
-          <input
-            className={inputClass}
-            id="po-number"
-            placeholder="PO-2026-001"
-            {...register("po_number", { required: "Enter a PO number." })}
-          />
-          {errors.po_number && (
-            <p className="mt-1 text-sm text-red-700" role="alert">
-              {errors.po_number.message}
-            </p>
-          )}
-        </div>
-
         <div>
           <label className={labelClass} htmlFor="supplier-name">
             Supplier name

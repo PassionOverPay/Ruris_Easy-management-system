@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import api from "../api/axios";
 
@@ -9,6 +9,8 @@ function todayAsDateInput() {
 }
 
 export default function InvoiceProcessing() {
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [purchaseOrdersError, setPurchaseOrdersError] = useState("");
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [match, setMatch] = useState(null);
   const [lookupMessage, setLookupMessage] = useState(null);
@@ -27,6 +29,18 @@ export default function InvoiceProcessing() {
       amount_original: "",
     },
   });
+
+  useEffect(() => {
+    async function loadPurchaseOrders() {
+      try {
+        const response = await api.get("/api/v1/purchasing/orders");
+        setPurchaseOrders(response.data);
+      } catch {
+        setPurchaseOrdersError("Purchase orders could not be loaded.");
+      }
+    }
+    void loadPurchaseOrders();
+  }, []);
 
   async function fetchMatch(event) {
     event.preventDefault();
@@ -115,25 +129,29 @@ export default function InvoiceProcessing() {
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="w-full sm:max-w-xs">
+          <div className="w-full sm:max-w-md">
             <label className={labelClass} htmlFor="match-purchase-order-id">
-              Purchase order ID
+              Purchase order
             </label>
-            <input
+            <select
               className={inputClass}
               id="match-purchase-order-id"
-              min="1"
               onChange={(event) => {
                 setPurchaseOrderId(event.target.value);
                 setMatch(null);
                 setLookupMessage(null);
                 setInvoiceMessage(null);
               }}
-              placeholder="e.g. 42"
               required
-              type="number"
               value={purchaseOrderId}
-            />
+            >
+              <option value="">-- Select Purchase Order --</option>
+              {purchaseOrders.map((po) => (
+                <option key={po.id} value={po.id}>
+                  {po.po_number} - {po.supplier_name} ({po.order_date})
+                </option>
+              ))}
+            </select>
           </div>
           <button
             className="min-h-11 rounded-lg bg-emerald-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
@@ -143,6 +161,11 @@ export default function InvoiceProcessing() {
             {lookupMessage?.type === "loading" ? "Fetching…" : "Fetch match"}
           </button>
         </div>
+        {purchaseOrdersError && (
+          <p className="text-sm text-red-700" role="alert">
+            {purchaseOrdersError}
+          </p>
+        )}
         {lookupMessage && (
           <p
             className={

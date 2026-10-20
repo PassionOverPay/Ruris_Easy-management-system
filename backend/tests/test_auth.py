@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -110,7 +111,7 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 201, response.text)
         order = self.session.exec(select(PurchaseOrder)).one()
         self.assertEqual(order.created_by_id, self.purchaser.id)
         logs = self.session.exec(select(AuditLog)).all()
@@ -119,6 +120,52 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
             [("login", "User"), ("create", "PurchaseOrder")],
         )
         self.assertEqual(logs[1].entity_id, str(order.id))
+
+    def test_purchase_order_number_is_generated_when_omitted(self) -> None:
+        token = self.token_for("buyer@example.com", "buyer-password")
+        response = self.client.post(
+            "/api/v1/purchasing/orders",
+            headers={"Authorization": "Bearer " + token},
+            json={
+                "supplier_name": "Supplier",
+                "order_date": "2026-10-19",
+                "expected_delivery_date": "2026-10-26",
+                "items_summary": [{"item": "Laptop", "qty": 2}],
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertRegex(response.json()["po_number"], r"^PO-2026-\d{20}$")
+
+    def test_purchase_order_list_is_newest_first(self) -> None:
+        older_order = PurchaseOrder(
+            po_number="PO-OLD",
+            supplier_name="Older supplier",
+            order_date=date(2026, 10, 18),
+            expected_delivery_date=date(2026, 10, 25),
+            created_by_id=self.purchaser.id,
+        )
+        newer_order = PurchaseOrder(
+            po_number="PO-NEW",
+            supplier_name="Newer supplier",
+            order_date=date(2026, 10, 19),
+            expected_delivery_date=date(2026, 10, 26),
+            created_by_id=self.purchaser.id,
+        )
+        self.session.add_all([older_order, newer_order])
+        self.session.commit()
+
+        token = self.token_for("buyer@example.com", "buyer-password")
+        response = self.client.get(
+            "/api/v1/purchasing/orders",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [order["po_number"] for order in response.json()],
+            ["PO-NEW", "PO-OLD"],
+        )
 
     def test_wrong_role_and_missing_token_are_rejected(self) -> None:
         token = self.token_for("accounting@example.com", "accounting-password")
