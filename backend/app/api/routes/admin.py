@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session
+from sqlmodel import Session, desc, select
 
 from app.api.dependencies import RequireRole
 from app.core.security import hash_password
@@ -10,6 +10,19 @@ from app.schemas.user import UserCreate, UserResponse
 from app.services.audit import log_action
 
 router = APIRouter()
+
+
+@router.get("/users", response_model=list[UserResponse])
+def list_users(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(RequireRole([UserRole.ADMIN])),
+) -> list[User]:
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Authenticated user is invalid")
+
+    users = session.exec(select(User).order_by(desc(User.created_at))).all()
+    log_action(session, current_user.id, "read", "User", "list")
+    return users
 
 
 @router.post("/users", response_model=UserResponse, status_code=201)

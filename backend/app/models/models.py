@@ -42,6 +42,7 @@ class User(SQLModel, table=True):
     full_name: str
     hashed_password: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    is_active: bool = Field(default=True)
     roles: list[str] = Field(
         default_factory=list,
         sa_column=Column(JSON, nullable=False, default=list),

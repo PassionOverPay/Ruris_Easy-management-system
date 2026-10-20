@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import CreatePOForm from "../components/CreatePOForm";
 import CreateReceiptForm from "../components/CreateReceiptForm";
 import InvoiceProcessing from "../components/InvoiceProcessing";
+import UserManagement from "../components/UserManagement";
 
 const departmentContent = {
   admin: {
@@ -44,6 +45,7 @@ export default function DepartmentHome({ role }) {
   const [provisionMessage, setProvisionMessage] = useState("");
   const [provisionError, setProvisionError] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
+  const [usersRefreshKey, setUsersRefreshKey] = useState(0);
 
   async function handleProvision(event) {
     event.preventDefault();
@@ -53,6 +55,7 @@ export default function DepartmentHome({ role }) {
     try {
       await api.post("/api/v1/admin/users", newUser);
       setProvisionMessage(`Account created for ${newUser.email}.`);
+      setUsersRefreshKey((key) => key + 1);
       setNewUser({
         email: "",
         full_name: "",
@@ -112,83 +115,89 @@ export default function DepartmentHome({ role }) {
         {role === "warehouse" && <CreateReceiptForm />}
         {role === "accounting" && <InvoiceProcessing />}
         {role === "admin" && (
-          <form className="provision-form" onSubmit={handleProvision}>
-            <h2>Create a team account</h2>
-            <label htmlFor="new-user-name">Full name</label>
-            <input
-              autoComplete="name"
-              id="new-user-name"
-              maxLength={255}
-              onChange={(event) =>
-                setNewUser({ ...newUser, full_name: event.target.value })
-              }
-              required
-              value={newUser.full_name}
-            />
-            <label htmlFor="new-user-email">Work email</label>
-            <input
-              autoComplete="email"
-              id="new-user-email"
-              onChange={(event) =>
-                setNewUser({ ...newUser, email: event.target.value })
-              }
-              required
-              type="email"
-              value={newUser.email}
-            />
-            <label htmlFor="new-user-password">Temporary password</label>
-            <input
-              autoComplete="new-password"
-              id="new-user-password"
-              onChange={(event) =>
-                setNewUser({ ...newUser, password: event.target.value })
-              }
-              required
-              type="password"
-              value={newUser.password}
-            />
-            <fieldset className="role-options">
-              <legend>Department roles</legend>
-              {[
-                ["purchasing", "Purchasing"],
-                ["warehouse", "Warehouse"],
-                ["accounting", "Accounting"],
-              ].map(([value, label]) => (
-                <label className="role-option" key={value}>
-                  <input
-                    checked={newUser.roles.includes(value)}
-                    onChange={(event) => {
-                      const roles = event.target.checked
-                        ? [...newUser.roles, value]
-                        : newUser.roles.filter((roleName) => roleName !== value);
-                      setNewUser({ ...newUser, roles });
-                    }}
-                    type="checkbox"
-                    value={value}
-                  />
-                  {label}
-                </label>
-              ))}
-            </fieldset>
-            {newUser.roles.length === 0 && (
-              <p className="form-error" role="alert">
-                Choose at least one department role.
-              </p>
-            )}
-            {provisionError && (
-              <p className="form-error" role="alert">
-                {provisionError}
-              </p>
-            )}
-            {provisionMessage && (
-              <p className="form-success" role="status">
-                {provisionMessage}
-              </p>
-            )}
-            <button disabled={creatingUser || newUser.roles.length === 0} type="submit">
-              {creatingUser ? "Creating account…" : "Create account"}
-            </button>
-          </form>
+          <>
+            <form className="provision-form" onSubmit={handleProvision}>
+              <h2>Create a team account</h2>
+              <label htmlFor="new-user-name">Full name</label>
+              <input
+                autoComplete="name"
+                id="new-user-name"
+                maxLength={255}
+                onChange={(event) =>
+                  setNewUser({ ...newUser, full_name: event.target.value })
+                }
+                required
+                value={newUser.full_name}
+              />
+              <label htmlFor="new-user-email">Work email</label>
+              <input
+                autoComplete="email"
+                id="new-user-email"
+                onChange={(event) =>
+                  setNewUser({ ...newUser, email: event.target.value })
+                }
+                required
+                type="email"
+                value={newUser.email}
+              />
+              <label htmlFor="new-user-password">Temporary password</label>
+              <input
+                autoComplete="new-password"
+                id="new-user-password"
+                onChange={(event) =>
+                  setNewUser({ ...newUser, password: event.target.value })
+                }
+                required
+                type="password"
+                value={newUser.password}
+              />
+              <fieldset className="role-options">
+                <legend>Department roles</legend>
+                {[
+                  ["purchasing", "Purchasing"],
+                  ["warehouse", "Warehouse"],
+                  ["accounting", "Accounting"],
+                ].map(([value, label]) => (
+                  <label className="role-option" key={value}>
+                    <input
+                      checked={newUser.roles.includes(value)}
+                      onChange={(event) => {
+                        const roles = event.target.checked
+                          ? [...newUser.roles, value]
+                          : newUser.roles.filter((roleName) => roleName !== value);
+                        setNewUser({ ...newUser, roles });
+                      }}
+                      type="checkbox"
+                      value={value}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+              {newUser.roles.length === 0 && (
+                <p className="form-error" role="alert">
+                  Choose at least one department role.
+                </p>
+              )}
+              {provisionError && (
+                <p className="form-error" role="alert">
+                  {provisionError}
+                </p>
+              )}
+              {provisionMessage && (
+                <p className="form-success" role="status">
+                  {provisionMessage}
+                </p>
+              )}
+              <button
+                disabled={creatingUser || newUser.roles.length === 0}
+                type="submit"
+              >
+                {creatingUser ? "Creating account…" : "Create account"}
+              </button>
+            </form>
+            <UserManagement refreshKey={usersRefreshKey} />
+          </>
         )}
       </section>
     </main>

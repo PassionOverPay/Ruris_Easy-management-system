@@ -27,4 +27,5 @@ class UserResponse(SQLModel):
     email: str
     full_name: str
     roles: list[str]
+    is_active: bool
     created_at: datetime

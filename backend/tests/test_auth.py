@@ -251,6 +251,34 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
         self.assertEqual(audit_log.action, "create")
         self.assertEqual(audit_log.entity_id, str(created_user.id))
 
+    def test_admin_can_list_users_with_roles_and_active_status(self) -> None:
+        token = self.token_for("admin@example.com", "admin-password")
+
+        response = self.client.get(
+            "/api/v1/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        listed_user = next(
+            user for user in response.json() if user["email"] == "buyer@example.com"
+        )
+        self.assertEqual(listed_user["full_name"], "Buyer User")
+        self.assertEqual(listed_user["roles"], ["purchasing"])
+        self.assertTrue(listed_user["is_active"])
+        self.assertIn("created_at", listed_user)
+        self.assertNotIn("hashed_password", listed_user)
+
+    def test_department_user_cannot_list_admin_users(self) -> None:
+        token = self.token_for("buyer@example.com", "buyer-password")
+
+        response = self.client.get(
+            "/api/v1/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_department_user_cannot_provision_users(self) -> None:
         token = self.token_for("buyer@example.com", "buyer-password")
 
