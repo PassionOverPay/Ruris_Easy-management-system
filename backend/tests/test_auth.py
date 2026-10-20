@@ -97,6 +97,38 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.session.exec(select(AuditLog)).all(), [])
 
+    def test_cors_allows_configured_local_frontend_origin(self) -> None:
+        response = self.client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            "http://localhost:5173",
+        )
+        self.assertIn(
+            "authorization",
+            response.headers["access-control-allow-headers"].lower(),
+        )
+        self.assertEqual(response.headers["access-control-allow-credentials"], "true")
+
+    def test_cors_does_not_allow_unconfigured_origin(self) -> None:
+        response = self.client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": "https://untrusted.example",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        self.assertNotIn("access-control-allow-origin", response.headers)
+
     def test_purchasing_role_can_create_and_audit_purchase_order(self) -> None:
         token = self.token_for("buyer@example.com", "buyer-password")
         response = self.client.post(

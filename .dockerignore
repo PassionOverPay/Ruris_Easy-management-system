@@ -1,0 +1,11 @@
+.git
+.venv
+**/__pycache__
+**/*.py[cod]
+**/node_modules
+**/dist
+DockerDesktopWSL/
+.env
+.env.*
+!.env.example
+*.log

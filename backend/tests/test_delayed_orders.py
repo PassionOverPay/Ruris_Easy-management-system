@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
@@ -12,6 +13,7 @@ from app.core.security import hash_password
 from app.models import PurchaseOrder, PurchaseOrderStatus, User, UserRole
 from app.services.delayed_orders import check_delayed_orders
 from app.services.email_service import send_delay_alert_email
+from app.worker import run_worker
 
 
 class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
@@ -162,14 +164,26 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job.trigger.fields[6].name, "minute")
         self.assertEqual(str(job.trigger.fields[6]), "0")
 
-    def test_app_lifespan_starts_and_stops_scheduler(self) -> None:
+    async def test_worker_starts_and_stops_scheduler(self) -> None:
         scheduler = create_scheduler()
-        with patch("app.main.create_scheduler", return_value=scheduler):
-            with TestClient(app) as client:
+        with patch("app.worker.create_scheduler", return_value=scheduler):
+            worker_task = asyncio.create_task(run_worker())
+            try:
+                await asyncio.sleep(0)
                 self.assertTrue(scheduler.running)
-                self.assertEqual(client.get("/api/v1/health").status_code, 200)
+            finally:
+                worker_task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await worker_task
 
         self.assertFalse(scheduler.running)
+
+    def test_api_health_does_not_start_background_scheduler(self) -> None:
+        with patch("app.worker.create_scheduler") as create_worker_scheduler:
+            with TestClient(app) as client:
+                self.assertEqual(client.get("/api/v1/health").status_code, 200)
+
+        create_worker_scheduler.assert_not_called()
 
 
 if __name__ == "__main__":

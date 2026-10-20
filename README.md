@@ -17,7 +17,9 @@ The API docs are available at `http://127.0.0.1:8000/docs`; the health check is
 The app reads local configuration from the root `.env.local`, independent of
 the launch directory; process environment variables take precedence. Keep
 `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and application secrets in this ignored
-file. Neon CLI provides the pooled connection used by the app and direct
+file. Configure `CORS_ORIGINS` as a JSON array of trusted frontend origins,
+for example `["http://localhost:5173","https://your-frontend.example"]`.
+Neon CLI provides the pooled connection used by the app and direct
 connection used by Alembic:
 
 ```text
@@ -50,6 +52,33 @@ The React/Vite client lives in `frontend/`. From that directory, run
 login, the client retrieves the authenticated identity from
 `GET /api/v1/users/me` to hydrate role-aware route guards. The root npm
 manifest remains dedicated to Neon CLI configuration.
+
+## Containerized local deployment
+
+Docker Compose runs a local PostgreSQL database, the FastAPI API, the separate
+daily email worker, and the Nginx-served frontend. The default PostgreSQL
+credentials in Compose are for local development only. Set a strong
+`JWT_SECRET_KEY` in the shell before starting containers. SMTP settings are
+optional until delayed-order email alerts are needed.
+
+```powershell
+$env:JWT_SECRET_KEY = "<generate-a-random-secret-of-at-least-32-bytes>"
+docker compose up --build -d
+docker compose run --rm backend python -m alembic -c alembic.ini upgrade head
+```
+
+Open `http://localhost`. The API is also available at `http://localhost:8000`.
+Nginx forwards `/api/` and `/token` to the backend and falls back to
+`index.html` for React Router paths. The worker is a separate process:
+`python -m app.worker`. It runs the scheduled delayed-order check at 08:00
+server-local time; the API process does not start the scheduler.
+
+For AWS, do not use the Compose PostgreSQL development password or commit
+secrets. Build and publish the backend image to ECR, provide production settings
+from Secrets Manager, and use a managed PostgreSQL connection (such as Neon)
+instead of exposing the Compose `db` service. Run Alembic migrations as a
+deployment step using a direct/unpooled database URL. Run the worker as a
+separate scheduled ECS task or service, not as an additional API web worker.
 
 ## Layout
 
