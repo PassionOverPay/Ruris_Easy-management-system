@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session
+from sqlmodel import Session, desc, select
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
@@ -11,6 +11,22 @@ from app.schemas.goods_receipt import GoodsReceiptCreate, GoodsReceiptRead
 from app.services.audit import log_action
 
 router = APIRouter()
+
+
+@router.get(
+    "/receipts",
+    response_model=list[GoodsReceiptRead],
+    dependencies=[Depends(RequireRole([UserRole.WAREHOUSE, UserRole.ADMIN]))],
+)
+def list_goods_receipts(
+    session: Session = Depends(get_session),
+) -> list[GoodsReceipt]:
+    return session.exec(
+        select(GoodsReceipt).order_by(
+            desc(GoodsReceipt.received_at),
+            desc(GoodsReceipt.id),
+        )
+    ).all()
 
 
 @router.post("/receipts", response_model=GoodsReceiptRead, status_code=201)

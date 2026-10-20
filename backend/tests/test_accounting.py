@@ -279,6 +279,15 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["amount_ron"], "100.00")
         get_rate.assert_not_awaited()
 
+    def test_accounting_user_can_list_invoice_history(self) -> None:
+        response = self.client.get(
+            "/api/v1/accounting/invoices",
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
     def test_rate_failure_returns_503_and_does_not_save_invoice(self) -> None:
         with patch(
             "app.api.routes.accounting.get_eur_to_ron_rate",

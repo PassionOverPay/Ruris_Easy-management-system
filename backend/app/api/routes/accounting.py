@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session
+from sqlmodel import Session, desc, select
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
@@ -13,6 +13,19 @@ from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
 
 router = APIRouter()
+
+
+@router.get(
+    "/invoices",
+    response_model=list[InvoiceRead],
+    dependencies=[Depends(RequireRole([UserRole.ACCOUNTING, UserRole.ADMIN]))],
+)
+def list_invoices(
+    session: Session = Depends(get_session),
+) -> list[Invoice]:
+    return session.exec(
+        select(Invoice).order_by(desc(Invoice.invoice_date), desc(Invoice.id))
+    ).all()
 
 
 @router.post("/invoices", response_model=InvoiceRead, status_code=201)

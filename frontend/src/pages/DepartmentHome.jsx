@@ -5,6 +5,9 @@ import { useAuth } from "../auth/AuthContext";
 import CreatePOForm from "../components/CreatePOForm";
 import CreateReceiptForm from "../components/CreateReceiptForm";
 import InvoiceProcessing from "../components/InvoiceProcessing";
+import POHistoryTable from "../components/POHistoryTable";
+import ReceiptsHistoryTable from "../components/ReceiptsHistoryTable";
+import InvoicesHistoryTable from "../components/InvoicesHistoryTable";
 import UserManagement from "../components/UserManagement";
 
 const departmentContent = {
@@ -111,9 +114,24 @@ export default function DepartmentHome({ role }) {
         <p className="eyebrow">{role.toUpperCase()} WORKSPACE</p>
         <h1>{content.title}</h1>
         <p>{content.description}</p>
-        {role === "purchasing" && <CreatePOForm />}
-        {role === "warehouse" && <CreateReceiptForm />}
-        {role === "accounting" && <InvoiceProcessing />}
+        {role === "purchasing" && (
+          <>
+            <CreatePOForm />
+            <POHistoryTable />
+          </>
+        )}
+        {role === "warehouse" && (
+          <>
+            <CreateReceiptForm />
+            <ReceiptsHistoryTable />
+          </>
+        )}
+        {role === "accounting" && (
+          <>
+            <InvoiceProcessing />
+            <InvoicesHistoryTable />
+          </>
+        )}
         {role === "admin" && (
           <>
             <form className="provision-form" onSubmit={handleProvision}>

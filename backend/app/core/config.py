@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./supply_chain.db"
     JWT_SECRET_KEY: str | None = None
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    SMTP_HOST: str | None = None
+    SMTP_PORT: str | None = None
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=REPOSITORY_ROOT / ".env.local",

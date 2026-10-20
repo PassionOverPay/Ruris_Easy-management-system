@@ -1,10 +1,11 @@
 import asyncio
-import os
 import smtplib
 import ssl
 from collections.abc import Sequence
 from datetime import date
 from email.message import EmailMessage
+
+from app.core.config import settings
 
 
 def _send_email(
@@ -42,10 +43,10 @@ async def send_delay_alert_email(
     if not recipient_emails:
         return
 
-    host = os.getenv("SMTP_HOST")
-    port_value = os.getenv("SMTP_PORT")
-    username = os.getenv("SMTP_USER")
-    password = os.getenv("SMTP_PASSWORD")
+    host = settings.SMTP_HOST
+    port_value = settings.SMTP_PORT
+    username = settings.SMTP_USER
+    password = settings.SMTP_PASSWORD
     if not all((host, port_value, username, password)):
         raise RuntimeError(
             "SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASSWORD must be configured"

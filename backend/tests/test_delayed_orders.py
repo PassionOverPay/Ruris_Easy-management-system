@@ -1,4 +1,3 @@
-import os
 import unittest
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
@@ -112,14 +111,11 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call.args[3], ["buyer@example.com"])
 
     async def test_email_service_uses_configured_smtp_and_message_fields(self) -> None:
-        environment = {
-            "SMTP_HOST": "smtp.example.com",
-            "SMTP_PORT": "587",
-            "SMTP_USER": "alerts@example.com",
-            "SMTP_PASSWORD": "smtp-password",
-        }
         with (
-            patch.dict(os.environ, environment, clear=False),
+            patch("app.services.email_service.settings.SMTP_HOST", "smtp.example.com"),
+            patch("app.services.email_service.settings.SMTP_PORT", "587"),
+            patch("app.services.email_service.settings.SMTP_USER", "alerts@example.com"),
+            patch("app.services.email_service.settings.SMTP_PASSWORD", "smtp-password"),
             patch(
                 "app.services.email_service._send_email"
             ) as send_email,
@@ -142,7 +138,12 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026-10-19", message.get_content())
 
     async def test_email_service_fails_explicitly_without_smtp_configuration(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("app.services.email_service.settings.SMTP_HOST", None),
+            patch("app.services.email_service.settings.SMTP_PORT", None),
+            patch("app.services.email_service.settings.SMTP_USER", None),
+            patch("app.services.email_service.settings.SMTP_PASSWORD", None),
+        ):
             with self.assertRaisesRegex(RuntimeError, "SMTP_HOST"):
                 await send_delay_alert_email(
                     "PO-123",

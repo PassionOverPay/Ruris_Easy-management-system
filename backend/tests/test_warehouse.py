@@ -88,6 +88,15 @@ class GoodsReceiptEndpointTests(unittest.TestCase):
         self.assertEqual(audit.entity_name, "GoodsReceipt")
         self.assertEqual(audit.entity_id, str(receipt.id))
 
+    def test_warehouse_user_can_list_receipt_history(self) -> None:
+        response = self.client.get(
+            "/api/v1/warehouse/receipts",
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
     def test_receipt_creation_requires_warehouse_role(self) -> None:
         purchaser = User(
             email="buyer@example.com",
