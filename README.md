@@ -100,10 +100,35 @@ item quantities. Run its SQLite-backed tests from `backend` with
 `python -m unittest discover -s tests -v`.
 
 Accounting creates invoices through `POST /api/v1/accounting/invoices`. EUR
-invoices use the BNR rate when its published date matches the invoice date,
-then try Frankfurter for that exact historical date. If neither source provides
-a valid rate for the date, the endpoint returns `503` and does not save the
-invoice. RON invoices use an exchange rate of `1`.
+invoices use the existing ECB EUR/RON reference-rate lookup, with Frankfurter
+as fallback, for the latest published rate on or before the invoice date. The
+six-decimal rate and the resulting RON amount are stored with the original
+invoice currency and amount. This is an informational conversion basis, not a
+determination of the correct VAT or accounting recognition rate; that depends
+on the applicable transaction, tax point, receipt date, contract, and
+accounting policy. RON invoices use a 1:1 rate without calling an external
+service. If no historical rate can be obtained, the API returns `503` and
+saves no invoice.
+
+EUR purchase orders use the same lookup for the order date. The original
+currency and PO amount remain authoritative, while the retrieved rate is stored
+as `budget_exchange_rate` and used to display an estimated RON budget cost.
+This estimate is not changed by later API rate changes. The nullable migration
+field deliberately remains empty for existing records with unknown historical
+rates; those EUR estimates are displayed as unavailable instead of being
+recalculated using today's rate. Existing RON orders remain directly
+comparable at 1:1.
+
+Invoice matching compares original-currency totals and receipt quantities,
+not RON conversions, so different budget and invoice reference rates alone do
+not dispute a match. The reported budget variance compares the stored-rate PO
+estimate with the sum of same-supplier, same-currency invoice RON conversions
+saved at each invoice's own rate; it is a budget-reporting difference, not an
+accounting foreign-exchange gain or loss. The current item JSON records PO
+prices and ordered/received quantities but has no invoice lines. Matching
+therefore cannot reliably compare invoice quantities or line prices
+individually; it uses aggregate original-currency invoice and received-goods
+values and exact item-name quantity totals.
 
 Database migrations use the root `alembic.ini` and the direct Neon connection
 in root `.env.local` (`DATABASE_URL_UNPOOLED`); run them from the repository
