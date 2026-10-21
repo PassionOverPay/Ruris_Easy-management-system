@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
+import DownloadPdfButton from "./DownloadPdfButton";
 
 const decisionStyles = {
   pending: "bg-amber-50 text-amber-800",
@@ -37,7 +38,13 @@ function InvoiceRows({ invoices }) {
           {invoices.map((invoice) => (
             <tr key={invoice.id}>
               <th className="whitespace-nowrap px-3 py-3 font-medium text-slate-900" scope="row">
-                {invoice.invoice_number}
+                <div className="space-y-3">
+                  <span>{invoice.invoice_number}</span>
+                  <DownloadPdfButton
+                    endpoint={`/api/v1/accounting/invoices/${invoice.id}/pdf`}
+                    filename={`supplier-invoice-report-${invoice.invoice_number}.pdf`}
+                  />
+                </div>
               </th>
               <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                 {invoice.invoice_date}

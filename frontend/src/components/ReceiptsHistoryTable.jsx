@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
+import DownloadPdfButton from "./DownloadPdfButton";
 
 export default function ReceiptsHistoryTable() {
   const [receipts, setReceipts] = useState([]);
@@ -84,7 +85,13 @@ export default function ReceiptsHistoryTable() {
                     className="whitespace-nowrap px-5 py-4 font-semibold text-slate-900 sm:px-7"
                     scope="row"
                   >
-                    {receipt.receipt_number}
+                    <div className="flex flex-col items-start gap-3">
+                      <span>{receipt.receipt_number}</span>
+                      <DownloadPdfButton
+                        endpoint={`/api/v1/warehouse/receipts/${receipt.id}/pdf`}
+                        filename={`goods-receipt-${receipt.receipt_number}.pdf`}
+                      />
+                    </div>
                   </th>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-600">
                     {receipt.purchase_order_id ?? "Unsolicited"}

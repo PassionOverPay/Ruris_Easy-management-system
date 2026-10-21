@@ -41,7 +41,7 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
         self.session.close()
         self.engine.dispose()
 
-    async def test_alerts_only_overdue_nonterminal_orders_to_purchasing_users(self) -> None:
+    async def test_alerts_only_overdue_nonterminal_orders_to_affected_team_users(self) -> None:
         yesterday = date.today() - timedelta(days=1)
         today = date.today()
         orders = [
@@ -110,7 +110,10 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
             ["PO-ORDERED", "PO-PARTIAL", "PO-BLOCKED"],
         )
         for call in send_alert.await_args_list:
-            self.assertEqual(call.args[3], ["buyer@example.com"])
+            self.assertEqual(
+                call.args[3],
+                ["buyer@example.com", "warehouse@example.com"],
+            )
 
     async def test_email_service_uses_configured_smtp_and_message_fields(self) -> None:
         with (

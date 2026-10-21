@@ -286,10 +286,10 @@ p {
 }
 
 .workspace-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   height: 76px;
   align-items: center;
-  justify-content: space-between;
   padding: 0 clamp(22px, 6vw, 84px);
   border-bottom: 1px solid #e6ece7;
   background: #fff;
@@ -308,6 +308,7 @@ p {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  justify-self: center;
 }
 
 .workspace-nav-link {
@@ -349,6 +350,7 @@ p {
 .user-menu {
   color: #65736a;
   font-size: 13px;
+  justify-self: end;
 }
 
 .text-button {
@@ -363,9 +365,17 @@ p {
 }
 
 .workspace-content {
-  width: min(900px, calc(100% - 48px));
+  width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
-  padding: clamp(60px, 10vh, 120px) 0;
+  padding: clamp(48px, 7vh, 80px) 0;
+}
+
+.workspace-content > form.max-w-3xl,
+.workspace-content > section.max-w-4xl,
+.workspace-content > .provision-form {
+  width: 100%;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .workspace-content .eyebrow {
@@ -471,10 +481,6 @@ p {
   font-size: 13px;
 }
 
-.history-content {
-  width: min(1000px, calc(100% - 48px));
-}
-
 .history-guide,
 .history-panel {
   margin-top: 28px;
@@ -500,6 +506,10 @@ p {
   color: #738078;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.history-guide p {
+  max-width: 86ch;
 }
 
 .history-guide p:last-child,
@@ -617,6 +627,24 @@ p {
   }
 }
 
+@media (max-width: 1100px) {
+  .workspace-header {
+    display: flex;
+    height: auto;
+    min-height: 76px;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .workspace-navigation {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 820px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -633,6 +661,7 @@ p {
   }
 
   .workspace-header {
+    display: flex;
     height: auto;
     min-height: 76px;
     flex-wrap: wrap;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
+import DownloadPdfButton from "./DownloadPdfButton";
 
 const statusStyles = {
   ordered: "bg-blue-50 text-blue-700",
@@ -95,21 +96,27 @@ export default function POHistoryTable() {
               {orders.map((order) => (
                 <tr key={order.id}>
                   <td className="px-5 py-4 sm:px-7">
-                    <details>
-                      <summary className="cursor-pointer font-semibold text-emerald-900">
-                        {order.po_number}
-                      </summary>
-                      <ul className="mt-2 space-y-1 pl-4 text-xs text-slate-600">
-                        {order.items_summary.map((item, index) => (
-                          <li key={`${item.item}-${index}`}>
-                            {item.item}: {item.qty}
-                          </li>
-                        ))}
-                        {order.items_summary.length === 0 && (
-                          <li>No line items recorded.</li>
-                        )}
-                      </ul>
-                    </details>
+                    <div className="space-y-3">
+                      <details>
+                        <summary className="cursor-pointer font-semibold text-emerald-900">
+                          {order.po_number}
+                        </summary>
+                        <ul className="mt-2 space-y-1 pl-4 text-xs text-slate-600">
+                          {order.items_summary.map((item, index) => (
+                            <li key={`${item.item}-${index}`}>
+                              {item.item}: {item.qty}
+                            </li>
+                          ))}
+                          {order.items_summary.length === 0 && (
+                            <li>No line items recorded.</li>
+                          )}
+                        </ul>
+                      </details>
+                      <DownloadPdfButton
+                        endpoint={`/api/v1/purchasing/orders/${order.id}/pdf`}
+                        filename={`purchase-order-${order.po_number}.pdf`}
+                      />
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-800">
                     {order.supplier_name}

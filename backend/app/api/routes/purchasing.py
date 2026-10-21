@@ -5,15 +5,40 @@ from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from app.api.dependencies import RequireRole
+from app.api.pdf_response import pdf_response
 from app.db.session import get_session
 from app.models import GoodsReceipt, PurchaseOrder, User, UserRole
 from app.schemas.matching import ThreeWayMatch
 from app.schemas.purchase_order import PurchaseOrderCreate, PurchaseOrderRead
 from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
+from app.services.pdf_documents import generate_purchase_order_pdf
 from app.services.three_way_match import calculate_three_way_match
 
 router = APIRouter()
+
+
+@router.get("/orders/{purchase_order_id}/pdf")
+def download_purchase_order_pdf(
+    purchase_order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(
+        RequireRole(
+            [
+                UserRole.PURCHASING,
+                UserRole.WAREHOUSE,
+                UserRole.ACCOUNTING,
+                UserRole.ADMIN,
+            ]
+        )
+    ),
+):
+    order = session.get(PurchaseOrder, purchase_order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    return pdf_response(
+        generate_purchase_order_pdf(order), "purchase-order", order.po_number
+    )
 
 
 @router.get("/orders", response_model=list[PurchaseOrderRead])

@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
 
 from app.api.dependencies import RequireRole
+from app.api.pdf_response import pdf_response
 from app.db.session import get_session
 from app.models import (
     Currency,
@@ -19,9 +20,33 @@ from app.schemas.invoice import InvoiceCreate, InvoiceRead
 from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
 from app.services.notifications import notify_teams
+from app.services.pdf_documents import generate_invoice_pdf
 from app.services.three_way_match import reconcile_po_invoices
 
 router = APIRouter()
+
+
+@router.get("/invoices/{invoice_id}/pdf")
+def download_invoice_pdf(
+    invoice_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(
+        RequireRole([UserRole.ACCOUNTING, UserRole.ADMIN])
+    ),
+):
+    invoice = session.get(Invoice, invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    purchase_order = (
+        session.get(PurchaseOrder, invoice.purchase_order_id)
+        if invoice.purchase_order_id is not None
+        else None
+    )
+    return pdf_response(
+        generate_invoice_pdf(invoice, purchase_order),
+        "supplier-invoice-report",
+        invoice.invoice_number,
+    )
 
 
 @router.get(

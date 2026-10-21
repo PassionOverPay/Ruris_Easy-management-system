@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
 
 from app.api.dependencies import RequireRole
+from app.api.pdf_response import pdf_response
 from app.db.session import get_session
 from app.models import (
     GoodsReceipt,
@@ -17,12 +18,37 @@ from app.models import (
 from app.schemas.goods_receipt import GoodsReceiptCreate, GoodsReceiptRead
 from app.services.audit import log_action
 from app.services.notifications import notify_teams
+from app.services.pdf_documents import generate_goods_receipt_pdf
 from app.services.three_way_match import (
     calculate_three_way_match,
     reconcile_po_invoices,
 )
 
 router = APIRouter()
+
+
+@router.get("/receipts/{receipt_id}/pdf")
+def download_goods_receipt_pdf(
+    receipt_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(
+        RequireRole([UserRole.WAREHOUSE, UserRole.ADMIN])
+    ),
+):
+    receipt = session.get(GoodsReceipt, receipt_id)
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="Goods receipt not found")
+    purchase_order = (
+        session.get(PurchaseOrder, receipt.purchase_order_id)
+        if receipt.purchase_order_id is not None
+        else None
+    )
+    receiver = session.get(User, receipt.received_by_id)
+    return pdf_response(
+        generate_goods_receipt_pdf(receipt, purchase_order, receiver),
+        "goods-receipt",
+        receipt.receipt_number,
+    )
 
 
 @router.get(
