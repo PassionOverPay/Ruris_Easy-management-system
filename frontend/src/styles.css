@@ -471,6 +471,152 @@ p {
   font-size: 13px;
 }
 
+.history-content {
+  width: min(1000px, calc(100% - 48px));
+}
+
+.history-guide,
+.history-panel {
+  margin-top: 28px;
+  padding: 24px;
+  border: 1px solid #dce4dd;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(29 53 39 / 4%);
+}
+
+.history-guide h2,
+.history-panel h2 {
+  margin-bottom: 8px;
+  color: #253b2e;
+  font-family: "Segoe UI", Inter, system-ui, sans-serif;
+  font-size: 18px;
+  letter-spacing: -0.035em;
+}
+
+.history-guide p,
+.history-panel-heading p {
+  margin-bottom: 8px;
+  color: #738078;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.history-guide p:last-child,
+.history-panel-heading p {
+  margin-bottom: 0;
+}
+
+.history-guide strong {
+  color: #365a45;
+}
+
+.history-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.history-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e6ece7;
+}
+
+.history-panel-heading h2 {
+  margin-bottom: 3px;
+}
+
+.history-count {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #edf3ee;
+  color: #365a45;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-list {
+  margin: 0;
+  padding: 0 24px;
+  list-style: none;
+}
+
+.history-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  padding: 19px 0;
+  border-bottom: 1px solid #edf1ed;
+}
+
+.history-entry:last-child {
+  border-bottom: 0;
+}
+
+.history-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 2px solid #4f795f;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px #edf3ee;
+}
+
+.history-description {
+  margin-bottom: 5px;
+  color: #253b2e;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.history-actor,
+.history-time {
+  margin: 0;
+  color: #7b8980;
+  font-size: 12px;
+}
+
+.history-actor span {
+  padding: 0 4px;
+  color: #b1bbb4;
+}
+
+.history-time {
+  white-space: nowrap;
+}
+
+.history-state {
+  margin: 0;
+  padding: 24px;
+  color: #738078;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .history-guide,
+  .history-panel-heading {
+    padding: 18px;
+  }
+
+  .history-list {
+    padding: 0 18px;
+  }
+
+  .history-entry {
+    grid-template-columns: 12px minmax(0, 1fr);
+  }
+
+  .history-time {
+    grid-column: 2;
+  }
+}
+
 @media (max-width: 820px) {
   .login-page {
     grid-template-columns: 1fr;

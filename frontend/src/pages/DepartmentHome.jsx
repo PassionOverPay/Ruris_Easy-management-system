@@ -102,6 +102,14 @@ export default function DepartmentHome({ role }) {
                 {details.title}
               </NavLink>
             ))}
+            <NavLink
+              className={({ isActive }) =>
+                `workspace-nav-link${isActive ? " active" : ""}`
+              }
+              to="/history"
+            >
+              History
+            </NavLink>
         </nav>
         <div className="user-menu">
           <span>{user.full_name}</span>

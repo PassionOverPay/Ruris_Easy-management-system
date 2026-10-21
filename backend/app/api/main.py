@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.api.routes import accounting, admin, health, purchasing, users, warehouse
+from app.api.routes import accounting, admin, health, history, purchasing, users, warehouse
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(history.router, prefix="/history", tags=["history"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(purchasing.router, prefix="/purchasing", tags=["purchasing"])
