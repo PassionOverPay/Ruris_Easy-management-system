@@ -16,15 +16,15 @@ The API docs are available at `http://127.0.0.1:8000/docs`; the health check is
 
 The app reads local configuration from the root `.env.local`, independent of
 the launch directory; process environment variables take precedence. Keep
-`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and application secrets in this ignored
-file. Configure `CORS_ORIGINS` as a JSON array of trusted frontend origins,
+`DATABASE_URL` and application secrets in this ignored file. Use a direct
+database connection URL for `DATABASE_URL` so both the application and Alembic
+migrations use the same endpoint. Configure `CORS_ORIGINS` as a JSON array of
+trusted frontend origins,
 for example `["http://localhost:5173","https://your-frontend.example"]`.
-Neon CLI provides the pooled connection used by the app and direct
-connection used by Alembic:
+Use the direct Neon connection for both application traffic and Alembic:
 
 ```text
-DATABASE_URL=postgresql://user:password@host-pooler.region.aws.neon.tech/neondb?sslmode=require
-DATABASE_URL_UNPOOLED=postgresql://user:password@host.region.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql://user:password@host.region.aws.neon.tech/neondb?sslmode=require
 ```
 
 The SQLModel engine uses Psycopg 3 and converts standard `postgresql://` Neon
@@ -57,8 +57,8 @@ manifest remains dedicated to Neon CLI configuration.
 
 Docker Compose runs a local PostgreSQL database, the FastAPI API, the separate
 daily email worker, and the Nginx-served frontend. The default PostgreSQL
-credentials in Compose are for local development only; `DATABASE_URL` and
-`DATABASE_URL_UNPOOLED` from `.env.local` take precedence when set, and the
+credentials in Compose are for local development only; `DATABASE_URL` from
+`.env.local` takes precedence when set, and the
 local database URLs are used as fallbacks. Set a strong
 `JWT_SECRET_KEY` in the root `.env.local` before starting containers. SMTP
 settings in the same file are optional until delayed-order email alerts are
@@ -131,9 +131,9 @@ individually; it uses aggregate original-currency invoice and received-goods
 values and exact item-name quantity totals.
 
 Database migrations use the root `alembic.ini` and the direct Neon connection
-in root `.env.local` (`DATABASE_URL_UNPOOLED`); run them from the repository
-root with `python -m alembic -c alembic.ini upgrade head`. The application
-continues to use its pooled `DATABASE_URL` for normal traffic.
+in root `.env.local` (`DATABASE_URL`); run them from the repository root with
+`python -m alembic -c alembic.ini upgrade head`. The application uses that same
+connection URL for normal traffic.
 
 The invoice create, purchase-order create, and purchase-order match endpoints
 are restricted to Accounting or Purchasing as appropriate. Successful login,

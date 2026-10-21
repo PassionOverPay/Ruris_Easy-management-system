@@ -25,10 +25,10 @@ target_metadata = SQLModel.metadata
 
 
 def get_database_url():
-    database_url = os.getenv("DATABASE_URL_UNPOOLED")
+    database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise RuntimeError(
-            "DATABASE_URL_UNPOOLED is required for migrations. "
+            "DATABASE_URL is required for migrations. "
             "Set it in the process environment or root .env.local."
         )
 
