@@ -1,150 +1,185 @@
-# Supply Chain Management API
+# Supply Chain Management
 
-## Run locally
+Internal purchasing, warehouse, and accounting workflow application. The
+frontend is a React/Vite single-page app; the API is FastAPI with SQLModel and
+Alembic; Nginx serves the frontend and proxies API requests to the backend.
 
-From the repository root:
+## Features
+
+- JWT sign-in and role-aware access for Purchasing, Warehouse, and Accounting.
+- Purchase orders, partial goods receipts, supplier invoices, and order/invoice/
+  receipt matching.
+- History page and audit log for recorded actions, including who performed
+  supported actions and when.
+- PDF downloads for purchase orders, goods receipts, and invoices.
+- EUR to RON reference rates for invoices and purchase-order budget estimates.
+- Email alerts for overdue orders, receipt discrepancies, and disputed invoices
+  to the affected departments when SMTP is configured.
+
+## Requirements
+
+- Python 3.11 or later for running the backend outside Docker.
+- Node.js 20 or later for the frontend.
+- Docker Compose for the containerized deployment.
+- PostgreSQL for a persistent shared deployment. SQLite is used by some tests.
+
+## Local development
+
+### Configure the backend
+
+Create a root `.env.local` file. Backend settings load this file, with process
+environment variables taking precedence. Keep credentials and secrets out of
+Git. Use a direct Neon database URL for `DATABASE_URL`; the same URL is used by
+the application and Alembic migrations.
+
+```text
+DATABASE_URL=postgresql://user:password@host.region.aws.neon.tech/neondb?sslmode=require
+JWT_SECRET_KEY=replace-with-at-least-32-random-bytes
+FIRST_ADMIN_EMAIL=admin@example.com
+FIRST_ADMIN_PASSWORD=replace-with-a-strong-password
+CORS_ORIGINS=["http://localhost:5173"]
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASSWORD=
+```
+
+The API falls back to SQLite when `DATABASE_URL` is unset, but Alembic requires
+`DATABASE_URL` and rejects a Neon pooled hostname. `CORS_ORIGINS` is a JSON
+array of trusted browser origins. SMTP settings are optional until email alerts
+are needed. Port 465 uses implicit TLS; other SMTP ports use STARTTLS.
+
+Create and activate a virtual environment, install dependencies, and apply the
+database migrations from the repository root:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r backend\requirements.txt
+python -m alembic -c alembic.ini upgrade head
+```
+
+Create the first administrator (the script does nothing if one already
+exists), then start the API:
+
+```powershell
+python scripts/create_first_admin.py
 uvicorn app.main:app --reload --app-dir backend
 ```
 
-The API docs are available at `http://127.0.0.1:8000/docs`; the health check is
-`http://127.0.0.1:8000/api/v1/health`.
+The API docs are at `http://127.0.0.1:8000/docs`. Health endpoints are
+`/api/v1/health` and `/api/v1/health/database`.
 
-The app reads local configuration from the root `.env.local`, independent of
-the launch directory; process environment variables take precedence. Keep
-`DATABASE_URL` and application secrets in this ignored file. Use a direct
-database connection URL for `DATABASE_URL` so both the application and Alembic
-migrations use the same endpoint. Configure `CORS_ORIGINS` as a JSON array of
-trusted frontend origins,
-for example `["http://localhost:5173","https://your-frontend.example"]`.
-Use the direct Neon connection for both application traffic and Alembic:
+### Run the frontend
 
-```text
-DATABASE_URL=postgresql://user:password@host.region.aws.neon.tech/neondb?sslmode=require
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-The SQLModel engine uses Psycopg 3 and converts standard `postgresql://` Neon
-URLs to the SQLAlchemy `postgresql+psycopg://` dialect. The database probe at
-`/api/v1/health/database` verifies a live connection.
+The Vite dev server runs at `http://localhost:5173` and proxies `/api` and
+`/token` to `http://127.0.0.1:8000`. Set `VITE_BACKEND_URL` in
+`frontend/.env.local` to change that development proxy target. The client uses
+relative API paths by default; `VITE_API_BASE_URL` is only needed when the API
+is served from a different base URL. The root npm manifest is for Neon CLI
+configuration, not the frontend.
 
-Authentication uses JWT bearer tokens. Set `JWT_SECRET_KEY` in `.env.local` to
-at least 32 random bytes before using `/token`. Sign in with an OAuth2 form
-containing `username` (the user's email) and `password`; access tokens expire
-after 30 minutes by default.
+There is no public sign-up. After migrations, bootstrap the first administrator
+as described above. An authenticated administrator can create department users
+through `POST /api/v1/admin/users`, with an email, password, full name, and one
+or more department roles.
 
-There is no public sign-up. After applying database migrations, bootstrap the
-first administrator by setting `FIRST_ADMIN_EMAIL` and `FIRST_ADMIN_PASSWORD`
-in the process environment or root `.env.local`, then run
-`python scripts/create_first_admin.py` from the repository root. The script
-does nothing if an admin already exists. An authenticated admin can provision
-department users with `POST /api/v1/admin/users`; the request accepts
-`email`, `password`, `full_name`, and a `purchasing`, `warehouse`, or
-`accounting` role. The response never includes the password.
+## Docker Compose
 
-The React/Vite client lives in `frontend/`. From that directory, run
-`npm install` and `npm run dev`. Vite proxies API requests to
-`http://127.0.0.1:8000` by default; set `VITE_BACKEND_URL` in
-`frontend/.env.local` to use another backend origin during development. After
-login, the client retrieves the authenticated identity from
-`GET /api/v1/users/me` to hydrate role-aware route guards. The root npm
-manifest remains dedicated to Neon CLI configuration.
-
-## Containerized local deployment
-
-Docker Compose runs a local PostgreSQL database, the FastAPI API, the separate
-daily email worker, and the Nginx-served frontend. The default PostgreSQL
-credentials in Compose are for local development only; `DATABASE_URL` from
-`.env.local` takes precedence when set, and the
-local database URLs are used as fallbacks. Set a strong
-`JWT_SECRET_KEY` in the root `.env.local` before starting containers. SMTP
-settings in the same file are optional until delayed-order email alerts are
-needed. Pass `.env.local` to Compose with `--env-file`; Compose does not
-automatically load files with that name.
+Compose starts PostgreSQL, the FastAPI backend, a separate email worker, and
+the Nginx frontend. The default PostgreSQL credentials are for local
+development only. Compose does not automatically read `.env.local`, so pass it
+explicitly:
 
 ```powershell
 docker compose --env-file .env.local up --build -d
 docker compose --env-file .env.local run --rm backend python -m alembic -c alembic.ini upgrade head
 ```
 
-After changing `.env.local`, run `docker compose --env-file .env.local up -d` so
-Compose recreates containers with the updated environment.
+Run `python scripts/create_first_admin.py` from the repository root on the host
+after migrations, with the local virtual environment active. The backend image
+does not include the `scripts/` directory.
 
-Open `http://localhost`. The API is also available at `http://localhost:8000`.
-Nginx forwards `/api/` and `/token` to the backend and falls back to
-`index.html` for React Router paths. The worker is a separate process:
-`python -m app.worker`. It runs the scheduled delayed-order check at 08:00
-server-local time; the API process does not start the scheduler.
+Open `http://localhost`. Nginx serves the frontend, proxies `/api/` and
+`/token` to the backend, and falls back to `index.html` for React Router paths.
+The API is also exposed on `http://localhost:8000` for local development.
 
-For AWS, do not use the Compose PostgreSQL development password or commit
-secrets. Build and publish the backend image to ECR, provide production settings
-from Secrets Manager, and use a managed PostgreSQL connection (such as Neon)
-instead of exposing the Compose `db` service. Run Alembic migrations as a
-deployment step using a direct/unpooled database URL. Run the worker as a
-separate scheduled ECS task or service, not as an additional API web worker.
+The worker runs the delayed-order check daily at 08:00 in server-local time;
+the API process does not run the scheduler. Configure `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` in `.env.local` to enable email.
+After changing environment values, recreate the affected services with
+`docker compose --env-file .env.local up -d` (use `--build` when changing
+frontend build arguments or application images).
 
-## Layout
+Compose currently sets `CORS_ORIGINS` to localhost values instead of reading
+that key from `.env.local`. This is sufficient for the same-origin Nginx and
+CloudFront setup below. A separately hosted frontend needs an appropriate
+backend CORS configuration.
 
-`backend/app` follows the modular layout used by the official FastAPI full-stack
-template: `api` for versioned routes, `core` for configuration, `db` for session
-management, and `crud`, `models`, and `schemas` for data access and domain
-definitions. The warehouse router remains an empty scaffold.
+## EC2 origin behind CloudFront
 
-The SQLModel tables are in `backend/app/models/models.py`. The purchasing
-endpoint `GET /api/v1/purchasing/{purchase_order_id}/match` aggregates all
-linked receipts and reports matched, missing, over-received, and unexpected
-item quantities. Run its SQLite-backed tests from `backend` with
-`python -m unittest discover -s tests -v`.
+The current hosting arrangement can use the EC2 Nginx frontend as the
+CloudFront custom origin. The container listens on HTTP port 80. Keep
+`VITE_API_BASE_URL` empty so the browser requests `/api/...` and `/token` on the
+CloudFront hostname; Nginx then proxies those paths to the backend. No CORS
+allow-list entry is needed for this same-origin arrangement.
 
-Accounting creates invoices through `POST /api/v1/accounting/invoices`. EUR
-invoices use the existing ECB EUR/RON reference-rate lookup, with Frankfurter
-as fallback, for the latest published rate on or before the invoice date. The
-six-decimal rate and the resulting RON amount are stored with the original
-invoice currency and amount. This is an informational conversion basis, not a
-determination of the correct VAT or accounting recognition rate; that depends
-on the applicable transaction, tax point, receipt date, contract, and
-accounting policy. RON invoices use a 1:1 rate without calling an external
-service. If no historical rate can be obtained, the API returns `503` and
-saves no invoice.
+In CloudFront, route the default behavior and the `/api/*` and `/token`
+requests to the EC2 origin. Allow the methods the API uses, forward the
+`Authorization` header and required query strings, and disable caching for API
+and token responses. Use short or no caching for `index.html` and longer
+caching for versioned static assets. The Nginx SPA fallback handles direct
+visits to frontend routes. Keep the origin protocol set to HTTP unless TLS is
+configured on EC2; Nginx in the provided Compose setup listens on port 80.
+CloudFront configuration is managed outside this repository.
 
-EUR purchase orders use the same lookup for the order date. The original
-currency and PO amount remain authoritative, while the retrieved rate is stored
-as `budget_exchange_rate` and used to display an estimated RON budget cost.
-This estimate is not changed by later API rate changes. The nullable migration
-field deliberately remains empty for existing records with unknown historical
-rates; those EUR estimates are displayed as unavailable instead of being
-recalculated using today's rate. Existing RON orders remain directly
-comparable at 1:1.
+## Alternative AWS deployment
 
-Invoice matching compares original-currency totals and receipt quantities,
-not RON conversions, so different budget and invoice reference rates alone do
-not dispute a match. The reported budget variance compares the stored-rate PO
-estimate with the sum of same-supplier, same-currency invoice RON conversions
-saved at each invoice's own rate; it is a budget-reporting difference, not an
-accounting foreign-exchange gain or loss. The current item JSON records PO
-prices and ordered/received quantities but has no invoice lines. Matching
-therefore cannot reliably compare invoice quantities or line prices
-individually; it uses aggregate original-currency invoice and received-goods
-values and exact item-name quantity totals.
+For an ECS deployment, publish the backend image to ECR, provide production
+settings through Secrets Manager, and use a managed PostgreSQL database rather
+than exposing the Compose `db` service. Run Alembic migrations as a deployment
+step using the direct `DATABASE_URL`. Run the email worker as a separate
+scheduled task or service, not as an additional API web worker.
 
-Database migrations use the root `alembic.ini` and the direct Neon connection
-in root `.env.local` (`DATABASE_URL`); run them from the repository root with
-`python -m alembic -c alembic.ini upgrade head`. The application uses that same
-connection URL for normal traffic.
+## Data and workflow notes
 
-The invoice create, purchase-order create, and purchase-order match endpoints
-are restricted to Accounting or Purchasing as appropriate. Successful login,
-invoice creation, purchase-order creation, and purchase-order matching actions
-are written to `AuditLog`. Additional department routes still need their own
-role guards and audit calls as they are implemented.
+EUR invoice amounts are converted using the ECB EUR/RON reference rate for the
+invoice date, with Frankfurter as a fallback. The rate and resulting RON amount
+are saved with the invoice; if no historical rate is available, invoice
+creation returns `503`. RON invoices use a 1:1 rate. EUR purchase orders store
+their rate-based RON budget estimate; existing records without a saved rate
+show the estimate as unavailable rather than using today's rate.
 
-The app checks for overdue purchase orders each day at 08:00 in the server's
-local timezone and emails all Purchasing users. Orders with `received` or
-`cancelled` status, and orders expected today, are excluded. Overdue `blocked`
-orders are included. Configure
-`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` in the process
-environment or root `.env.local`. Port 465 uses implicit TLS; other ports use
-STARTTLS.
+Invoice matching compares original-currency totals and receipt quantities.
+Current order items do not include invoice lines, so matching cannot compare
+invoice quantities or prices item by item. Budget variance is a reporting
+comparison and is not an accounting foreign-exchange gain or loss.
+
+Audit logging currently covers successful logins, user management, invoice
+creation, purchase-order creation, and purchase-order matching. Additional
+actions need their own audit calls as they are implemented.
+
+## Tests
+
+Run the SQLite-backed backend tests from the `backend` directory:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+## Project layout
+
+- `backend/app/api/routes/` — API route modules for authentication, users,
+  purchasing, warehouse, accounting, history, and health checks.
+- `backend/app/models/` and `backend/app/schemas/` — database models and API
+  schemas.
+- `backend/app/services/` — matching, currency, email, PDF, audit, and
+  notification services.
+- `alembic/` — database migrations, configured through the root `alembic.ini`.
+- `frontend/src/` — React application, pages, components, and API client.
