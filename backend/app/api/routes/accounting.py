@@ -10,6 +10,7 @@ from app.db.session import get_session
 from app.models import (
     Currency,
     Invoice,
+    InvoiceStatus,
     PurchaseOrder,
     User,
     UserRole,
@@ -17,6 +18,7 @@ from app.models import (
 from app.schemas.invoice import InvoiceCreate, InvoiceRead
 from app.services.audit import log_action
 from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
+from app.services.notifications import notify_teams
 from app.services.three_way_match import reconcile_po_invoices
 
 router = APIRouter()
@@ -96,4 +98,18 @@ async def create_invoice(
         str(invoice.id),
     )
     session.refresh(invoice)
+    if invoice.status == InvoiceStatus.DISPUTED:
+        order_label = (
+            f"purchase order {invoice.purchase_order_id}"
+            if invoice.purchase_order_id is not None
+            else "no linked purchase order"
+        )
+        await notify_teams(
+            session,
+            (UserRole.ACCOUNTING, UserRole.PURCHASING, UserRole.WAREHOUSE),
+            f"Invoice requires review: {invoice.invoice_number}",
+            f"Invoice {invoice.invoice_number} from {invoice.supplier_name} was marked "
+            f"disputed ({order_label}). Review required: "
+            f"{invoice.match_notes or 'See the invoice record.'}",
+        )
     return invoice

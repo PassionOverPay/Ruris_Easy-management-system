@@ -40,6 +40,19 @@ async def send_delay_alert_email(
     expected_date: date,
     recipient_emails: Sequence[str],
 ) -> None:
+    await send_workflow_alert_email(
+        f"Delayed purchase order: {po_number}",
+        f"Purchase order {po_number} from {supplier} is delayed. "
+        f"Its expected delivery date was {expected_date.isoformat()}.",
+        recipient_emails,
+    )
+
+
+async def send_workflow_alert_email(
+    subject: str,
+    body: str,
+    recipient_emails: Sequence[str],
+) -> None:
     if not recipient_emails:
         return
 
@@ -57,13 +70,10 @@ async def send_delay_alert_email(
         raise RuntimeError("SMTP_PORT must be an integer") from exc
 
     message = EmailMessage()
-    message["Subject"] = f"Delayed purchase order: {po_number}"
+    message["Subject"] = subject
     message["From"] = username
     message["To"] = ", ".join(recipient_emails)
-    message.set_content(
-        f"Purchase order {po_number} from {supplier} is delayed. "
-        f"Its expected delivery date was {expected_date.isoformat()}."
-    )
+    message.set_content(body)
     await asyncio.to_thread(
         _send_email,
         message,

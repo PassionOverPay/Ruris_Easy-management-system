@@ -4,8 +4,9 @@ from datetime import date
 
 from sqlmodel import Session, select
 
-from app.models import PurchaseOrder, PurchaseOrderStatus, User, UserRole
+from app.models import PurchaseOrder, PurchaseOrderStatus, UserRole
 from app.services.email_service import send_delay_alert_email
+from app.services.notifications import recipient_emails_for_roles
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +24,12 @@ async def check_delayed_orders(db_session: Session) -> None:
     if not delayed_orders:
         return
 
-    recipient_emails = [
-        user.email
-        for user in db_session.exec(select(User)).all()
-        if UserRole.PURCHASING.value in user.roles
-    ]
+    recipient_emails = recipient_emails_for_roles(
+        db_session,
+        (UserRole.PURCHASING, UserRole.WAREHOUSE, UserRole.ACCOUNTING),
+    )
     if not recipient_emails:
-        logger.warning("Delayed purchase orders found, but no purchasing users exist")
+        logger.warning("Delayed purchase orders found, but no active team recipients exist")
         return
 
     for order in delayed_orders:
