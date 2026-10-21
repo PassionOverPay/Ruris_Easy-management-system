@@ -8,6 +8,15 @@ const decisionStyles = {
   paid: "bg-blue-50 text-blue-700",
 };
 
+function amountToCents(amount) {
+  const [whole, fraction = ""] = String(amount).split(".");
+  return Number(whole) * 100 + Number(`${fraction}00`.slice(0, 2));
+}
+
+function formatCents(cents) {
+  return (cents / 100).toFixed(2);
+}
+
 function InvoiceRows({ invoices }) {
   if (invoices.length === 0) {
     return <p className="py-4 text-sm text-slate-500">No invoices linked to this PO.</p>;
@@ -20,7 +29,7 @@ function InvoiceRows({ invoices }) {
           <tr>
             <th className="px-3 py-2 font-semibold" scope="col">Invoice</th>
             <th className="px-3 py-2 font-semibold" scope="col">Date</th>
-            <th className="px-3 py-2 font-semibold" scope="col">Amount</th>
+            <th className="px-3 py-2 font-semibold" scope="col">Conversion</th>
             <th className="px-3 py-2 font-semibold" scope="col">Status</th>
           </tr>
         </thead>
@@ -34,7 +43,16 @@ function InvoiceRows({ invoices }) {
                 {invoice.invoice_date}
               </td>
               <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                {invoice.amount_original} {invoice.currency}
+                <p>{invoice.amount_original} {invoice.currency}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Rate: {invoice.exchange_rate} RON/{invoice.currency}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Converted: {invoice.amount_ron} RON
+                </p>
+                <p className="mt-1 max-w-xs whitespace-normal text-xs text-slate-400">
+                  {invoice.exchange_rate_purpose}
+                </p>
               </td>
               <td className="whitespace-nowrap px-3 py-3">
                 <span
@@ -132,6 +150,21 @@ export default function InvoicesHistoryTable() {
               (total, invoice) => total + Number(invoice.amount_original),
               0,
             );
+            const comparableInvoices = orderInvoices.filter(
+              (invoice) =>
+                invoice.currency === order.currency &&
+                invoice.supplier_name.trim().toLowerCase() ===
+                  order.supplier_name.trim().toLowerCase(),
+            );
+            const actualInvoiceCostRonCents = comparableInvoices.reduce(
+              (total, invoice) => total + amountToCents(invoice.amount_ron),
+              0,
+            );
+            const budgetVarianceRon =
+              order.estimated_total_ron === null || comparableInvoices.length === 0
+                ? null
+                : actualInvoiceCostRonCents -
+                  amountToCents(order.estimated_total_ron);
 
             return (
               <details
@@ -154,12 +187,44 @@ export default function InvoicesHistoryTable() {
                           : `${order.expected_total_original} ${order.currency}`}
                       </p>
                       <p className="mt-1">
+                        Budget estimate:{" "}
+                        {order.estimated_total_ron === null
+                          ? "Not available (historical rate not recorded)"
+                          : `${order.estimated_total_ron} RON`}
+                        {order.budget_exchange_rate &&
+                          ` at ${order.budget_exchange_rate} RON/${order.currency}`}
+                      </p>
+                      <p className="mt-1">
                         Billed: {billed.toFixed(2)} /{" "}
                         {order.expected_total_original === null
                           ? "—"
                           : Number(order.expected_total_original).toFixed(2)}{" "}
                         {order.currency}
                       </p>
+                      {comparableInvoices.length > 0 && (
+                        <p className="mt-1">
+                          Converted comparable invoice total:{" "}
+                          {formatCents(actualInvoiceCostRonCents)} RON
+                        </p>
+                      )}
+                      {orderInvoices.length > 0 && (
+                        <p className="mt-1">
+                          Budget variance:{" "}
+                          {budgetVarianceRon === null
+                            ? comparableInvoices.length === 0
+                              ? "Not available (no comparable invoices)"
+                              : "Not available (historical budget rate missing)"
+                            : `${formatCents(budgetVarianceRon)} RON`}
+                        </p>
+                      )}
+                      {orderInvoices.length > 0 && (
+                        <p className="mt-1 max-w-lg whitespace-normal text-xs text-slate-500">
+                          Variance compares same-supplier, same-currency invoice
+                          totals converted at each invoice&apos;s stored rate with
+                          the PO estimate using its stored budget rate. It is not
+                          an accounting FX gain or loss.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </summary>

@@ -65,6 +65,9 @@ export default function CreatePOForm() {
           : status === 400
             ? error.response.data?.detail ||
               "The purchase order could not be saved. Check the PO number and details."
+            : status === 503
+              ? error.response.data?.detail ||
+                "The historical exchange rate is unavailable. The purchase order was not saved."
             : "The purchase order could not be created. Please try again.";
       setSubmissionMessage({ type: "error", text: message });
     }

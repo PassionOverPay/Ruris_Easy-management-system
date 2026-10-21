@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from app.api.dependencies import RequireRole
 from app.db.session import get_session
@@ -10,6 +10,7 @@ from app.models import GoodsReceipt, PurchaseOrder, User, UserRole
 from app.schemas.matching import ThreeWayMatch
 from app.schemas.purchase_order import PurchaseOrderCreate, PurchaseOrderRead
 from app.services.audit import log_action
+from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
 from app.services.three_way_match import calculate_three_way_match
 
 router = APIRouter()
@@ -69,7 +70,7 @@ def get_purchase_order_match(
 
 @router.post("", response_model=PurchaseOrderRead, status_code=201)
 @router.post("/orders", response_model=PurchaseOrderRead, status_code=201)
-def create_purchase_order(
+async def create_purchase_order(
     order_data: PurchaseOrderCreate,
     session: Session = Depends(get_session),
     current_user: User = Depends(RequireRole([UserRole.PURCHASING])),
@@ -100,6 +101,17 @@ def create_purchase_order(
             start=Decimal("0"),
         )
     )
+    if order_data.currency.value == "EUR":
+        try:
+            budget_exchange_rate = await get_eur_to_ron_rate(order_data.order_date)
+        except ExchangeRateUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        order_values["budget_exchange_rate"] = budget_exchange_rate.quantize(
+            Decimal("0.000001"),
+            rounding=ROUND_HALF_UP,
+        )
+    else:
+        order_values["budget_exchange_rate"] = Decimal("1.000000")
 
     order = PurchaseOrder(
         **order_values,

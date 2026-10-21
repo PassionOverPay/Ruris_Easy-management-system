@@ -77,7 +77,14 @@ async def get_eur_to_ron_rate(rate_date: date) -> Decimal:
             )
             response.raise_for_status()
             return _ecb_eur_rate(response.text, rate_date)
-        except (httpx.HTTPError, KeyError, InvalidOperation, ValueError) as exc:
+        except (
+            httpx.HTTPError,
+            csv.Error,
+            KeyError,
+            InvalidOperation,
+            TypeError,
+            ValueError,
+        ) as exc:
             failures.append(f"ECB lookup failed: {exc}")
 
         try:
@@ -88,5 +95,5 @@ async def get_eur_to_ron_rate(rate_date: date) -> Decimal:
     raise ExchangeRateUnavailable(
         f"No EUR/RON rate is available for {rate_date}. "
         + "; ".join(failures)
-        + ". No invoice was saved."
+        + ". No financial record was saved."
     )

@@ -65,6 +65,10 @@ class PurchaseOrder(SQLModel, table=True):
         default=None,
         sa_column=Column(Float, nullable=True),
     )
+    budget_exchange_rate: Decimal | None = Field(
+        default=None,
+        sa_column=Column(Numeric(12, 6), nullable=True),
+    )
     items_summary: list[dict[str, Any]] = Field(
         default_factory=list,
         sa_type=JSON,

@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, computed_field
 from sqlmodel import Field, SQLModel
 
 from app.models import Currency, InvoiceStatus
@@ -35,3 +35,14 @@ class InvoiceRead(SQLModel):
     status: InvoiceStatus
     match_notes: str | None
     logged_by_id: int
+
+    @computed_field
+    @property
+    def exchange_rate_purpose(self) -> str:
+        if self.currency == Currency.RON:
+            return "RON recorded without conversion (1:1)."
+        return (
+            "Informational RON conversion using the EUR/RON reference rate "
+            "available on or before the invoice date; this is not a VAT or "
+            "accounting-policy rate."
+        )

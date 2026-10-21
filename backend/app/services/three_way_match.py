@@ -155,6 +155,25 @@ def reconcile_po_invoices(po_id: int, db: Session) -> None:
 
     running_invoiced_total = Decimal("0")
     for invoice in _invoices_for_po(db, po_id):
+        invoice_currency = (
+            invoice.currency.value
+            if hasattr(invoice.currency, "value")
+            else str(invoice.currency)
+        )
+        if invoice_currency != purchase_order.currency:
+            invoice.status = InvoiceStatus.DISPUTED
+            invoice.match_notes = (
+                "Disputed: Invoice currency does not match the purchase order."
+            )
+            continue
+        if invoice.supplier_name.strip().casefold() != (
+            purchase_order.supplier_name.strip().casefold()
+        ):
+            invoice.status = InvoiceStatus.DISPUTED
+            invoice.match_notes = (
+                "Disputed: Invoice supplier does not match the purchase order."
+            )
+            continue
         running_invoiced_total += invoice.amount_original
         if (
             running_invoiced_total <= total_received_value

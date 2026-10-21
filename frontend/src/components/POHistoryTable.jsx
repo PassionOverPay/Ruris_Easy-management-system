@@ -80,6 +80,12 @@ export default function POHistoryTable() {
                 <th className="px-5 py-3 font-semibold" scope="col">
                   Expected delivery
                 </th>
+                <th className="px-5 py-3 font-semibold" scope="col">
+                  Budget estimate
+                </th>
+                <th className="px-5 py-3 font-semibold" scope="col">
+                  Rate used
+                </th>
                 <th className="px-5 py-3 font-semibold sm:pr-7" scope="col">
                   Status
                 </th>
@@ -113,6 +119,18 @@ export default function POHistoryTable() {
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-600">
                     {order.expected_delivery_date}
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-4 text-slate-700">
+                    {order.estimated_total_ron === null
+                      ? "Not available"
+                      : `${order.estimated_total_ron} RON`}
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-4 text-slate-600">
+                    {order.currency === "RON"
+                      ? "1.000000 (RON)"
+                      : order.budget_exchange_rate
+                        ? `${order.budget_exchange_rate} RON/EUR`
+                        : "Not recorded"}
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 sm:pr-7">
                     <span

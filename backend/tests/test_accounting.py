@@ -138,7 +138,7 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
             await get_eur_to_ron_rate(date(2026, 10, 16))
 
         self.assertIn("No EUR/RON rate is available", str(error.exception))
-        self.assertIn("No invoice was saved", str(error.exception))
+        self.assertIn("No financial record was saved", str(error.exception))
 
     async def test_rejects_future_frankfurter_date(self) -> None:
         ecb_response = httpx.Response(
@@ -156,6 +156,37 @@ class CurrencyRateTests(unittest.IsolatedAsyncioTestCase):
                 "date": "2026-10-17",
                 "rates": {"RON": 5.2},
             },
+            request=httpx.Request(
+                "GET",
+                "https://api.frankfurter.dev/v1/2026-10-16",
+            ),
+        )
+        client = AsyncMock()
+        client.get.side_effect = [ecb_response, frankfurter_response]
+        async_client = AsyncMock()
+        async_client.__aenter__.return_value = client
+
+        with (
+            patch(
+                "app.services.currency.httpx.AsyncClient",
+                return_value=async_client,
+            ),
+            self.assertRaises(ExchangeRateUnavailable),
+        ):
+            await get_eur_to_ron_rate(date(2026, 10, 16))
+
+    async def test_malformed_rate_responses_fail_without_a_substitute_rate(self) -> None:
+        ecb_response = httpx.Response(
+            200,
+            text="not,the,expected,csv\n",
+            request=httpx.Request(
+                "GET",
+                "https://data-api.ecb.europa.eu/service/data/EXR/D.RON.EUR.SP00.A",
+            ),
+        )
+        frankfurter_response = httpx.Response(
+            200,
+            json={"base": "EUR", "date": "2026-10-16", "rates": {}},
             request=httpx.Request(
                 "GET",
                 "https://api.frankfurter.dev/v1/2026-10-16",
@@ -285,11 +316,85 @@ class InvoiceEndpointTests(unittest.TestCase):
         get_rate.assert_awaited_once_with(date(2026, 10, 16))
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.amount_ron, Decimal("533.10"))
+        self.assertEqual(saved.amount_original, Decimal("100.00"))
         self.assertEqual(saved.status, InvoiceStatus.PENDING)
         audit = self.session.exec(select(AuditLog)).one()
         self.assertEqual(audit.action, "create")
         self.assertEqual(audit.entity_name, "Invoice")
         self.assertEqual(audit.entity_id, str(saved.id))
+
+    def test_invoice_uses_its_own_rate_not_the_po_budget_rate(self) -> None:
+        order = self.create_purchase_order()
+        order.currency = "EUR"
+        order.budget_exchange_rate = Decimal("5.000000")
+        self.session.add(order)
+        self.session.commit()
+        self.create_receipt(order, [{"item": "Laptop", "qty": 2}])
+        payload = self.invoice_payload("EUR")
+        payload["purchase_order_id"] = order.id
+
+        with patch(
+            "app.api.routes.accounting.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            return_value=Decimal("6.1234567"),
+        ) as get_rate:
+            response = self.client.post(
+                "/api/v1/accounting/invoices",
+                json=payload,
+                headers=self.headers,
+            )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["status"], "matched")
+        self.assertEqual(response.json()["exchange_rate"], "6.123457")
+        self.assertEqual(response.json()["amount_original"], "100.00")
+        self.assertEqual(response.json()["amount_ron"], "612.35")
+        self.assertIn("not a VAT or accounting-policy rate", response.json()["exchange_rate_purpose"])
+        get_rate.assert_awaited_once_with(date(2026, 10, 16))
+
+    def test_invoice_history_keeps_saved_rate_when_provider_rate_changes(self) -> None:
+        with patch(
+            "app.api.routes.accounting.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            return_value=Decimal("5.331"),
+        ):
+            created = self.client.post(
+                "/api/v1/accounting/invoices",
+                json=self.invoice_payload("EUR"),
+                headers=self.headers,
+            )
+        self.assertEqual(created.status_code, 201, created.text)
+
+        with patch(
+            "app.api.routes.accounting.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            return_value=Decimal("8.000000"),
+        ) as changed_rate:
+            listed = self.client.get(
+                "/api/v1/accounting/invoices",
+                headers=self.headers,
+            )
+
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()[0]["exchange_rate"], "5.331000")
+        self.assertEqual(listed.json()[0]["amount_ron"], "533.10")
+        changed_rate.assert_not_awaited()
+
+    def test_eur_invoice_is_not_saved_when_rate_is_unavailable(self) -> None:
+        with patch(
+            "app.api.routes.accounting.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            side_effect=ExchangeRateUnavailable("No historical rate."),
+        ):
+            response = self.client.post(
+                "/api/v1/accounting/invoices",
+                json=self.invoice_payload("EUR"),
+                headers=self.headers,
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("No historical rate", response.json()["detail"])
+        self.assertEqual(self.session.exec(select(Invoice)).all(), [])
 
     def test_non_accounting_role_cannot_create_invoice(self) -> None:
         purchaser = User(
@@ -367,6 +472,28 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(
             response.json()["match_notes"],
             "Disputed: Received quantities do not match the purchase order.",
+        )
+
+    def test_invoice_from_different_supplier_is_disputed(self) -> None:
+        order = self.create_purchase_order()
+        self.create_receipt(order, [{"item": "Laptop", "qty": 2}])
+        payload = self.invoice_payload("RON")
+        payload.update(
+            purchase_order_id=order.id,
+            supplier_name="Different supplier",
+        )
+
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["status"], "disputed")
+        self.assertEqual(
+            response.json()["match_notes"],
+            "Disputed: Invoice supplier does not match the purchase order.",
         )
 
     def test_invoice_creation_reconciles_against_current_received_value(self) -> None:

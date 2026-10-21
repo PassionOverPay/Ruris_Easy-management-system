@@ -59,6 +59,10 @@ async def create_invoice(
             exchange_rate = await get_eur_to_ron_rate(invoice_data.invoice_date)
         except ExchangeRateUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        exchange_rate = exchange_rate.quantize(
+            Decimal("0.000001"),
+            rounding=ROUND_HALF_UP,
+        )
     else:
         exchange_rate = Decimal("1")
 

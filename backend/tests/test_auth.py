@@ -1,6 +1,7 @@
 import unittest
 from datetime import date
-from unittest.mock import patch
+from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -11,6 +12,7 @@ from app.core.security import decode_access_token, hash_password, verify_passwor
 from app.db.session import get_session
 from app.main import app
 from app.models import AuditLog, PurchaseOrder, User, UserRole
+from app.services.currency import ExchangeRateUnavailable
 
 
 class AuthenticationAndAuthorizationTests(unittest.TestCase):
@@ -131,26 +133,35 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
 
     def test_purchasing_role_can_create_and_audit_purchase_order(self) -> None:
         token = self.token_for("buyer@example.com", "buyer-password")
-        response = self.client.post(
-            "/api/v1/purchasing/orders",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "po_number": "PO-AUTH-001",
-                "supplier_name": "Supplier",
-                "order_date": "2026-10-19",
-                "expected_delivery_date": "2026-10-26",
-                "currency": "EUR",
-                "items_summary": [
-                    {"item": "Laptop", "qty": 2, "unit_price": "125.50"}
-                ],
-            },
-        )
+        with patch(
+            "app.api.routes.purchasing.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            return_value=Decimal("5.1234567"),
+        ) as get_rate:
+            response = self.client.post(
+                "/api/v1/purchasing/orders",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "po_number": "PO-AUTH-001",
+                    "supplier_name": "Supplier",
+                    "order_date": "2026-10-19",
+                    "expected_delivery_date": "2026-10-26",
+                    "currency": "EUR",
+                    "items_summary": [
+                        {"item": "Laptop", "qty": 2, "unit_price": "125.50"}
+                    ],
+                },
+            )
 
         self.assertEqual(response.status_code, 201, response.text)
         order = self.session.exec(select(PurchaseOrder)).one()
         self.assertEqual(order.currency, "EUR")
         self.assertEqual(order.expected_total_original, 251.0)
         self.assertEqual(response.json()["expected_total_original"], 251.0)
+        self.assertEqual(order.budget_exchange_rate, Decimal("5.123457"))
+        self.assertEqual(response.json()["budget_exchange_rate"], "5.123457")
+        self.assertEqual(response.json()["estimated_total_ron"], "1285.99")
+        get_rate.assert_awaited_once_with(date(2026, 10, 19))
         self.assertEqual(order.created_by_id, self.purchaser.id)
         logs = self.session.exec(select(AuditLog)).all()
         self.assertEqual(
@@ -158,6 +169,52 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
             [("login", "User"), ("create", "PurchaseOrder")],
         )
         self.assertEqual(logs[1].entity_id, str(order.id))
+
+        with patch(
+            "app.api.routes.purchasing.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            return_value=Decimal("9.000000"),
+        ) as changed_rate:
+            listed = self.client.get(
+                "/api/v1/purchasing/orders",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()[0]["budget_exchange_rate"], "5.123457")
+        self.assertEqual(listed.json()[0]["estimated_total_ron"], "1285.99")
+        changed_rate.assert_not_awaited()
+
+    def test_eur_purchase_order_is_not_saved_when_historical_rate_is_unavailable(
+        self,
+    ) -> None:
+        token = self.token_for("buyer@example.com", "buyer-password")
+        with patch(
+            "app.api.routes.purchasing.get_eur_to_ron_rate",
+            new_callable=AsyncMock,
+            side_effect=ExchangeRateUnavailable("No historical rate."),
+        ):
+            response = self.client.post(
+                "/api/v1/purchasing/orders",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "po_number": "PO-NO-RATE",
+                    "supplier_name": "Supplier",
+                    "order_date": "2026-10-19",
+                    "expected_delivery_date": "2026-10-26",
+                    "currency": "EUR",
+                    "items_summary": [
+                        {"item": "Laptop", "qty": 1, "unit_price": "10.00"}
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("No historical rate", response.json()["detail"])
+        self.assertIsNone(
+            self.session.exec(
+                select(PurchaseOrder).where(PurchaseOrder.po_number == "PO-NO-RATE")
+            ).first()
+        )
 
     def test_purchase_order_number_is_generated_when_omitted(self) -> None:
         token = self.token_for("buyer@example.com", "buyer-password")
@@ -176,6 +233,8 @@ class AuthenticationAndAuthorizationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201, response.text)
         self.assertRegex(response.json()["po_number"], r"^PO-2026-\d{20}$")
+        self.assertEqual(response.json()["budget_exchange_rate"], "1.000000")
+        self.assertEqual(response.json()["estimated_total_ron"], "30.50")
 
     def test_purchase_order_list_is_newest_first(self) -> None:
         older_order = PurchaseOrder(

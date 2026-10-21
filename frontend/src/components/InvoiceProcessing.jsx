@@ -85,7 +85,7 @@ export default function InvoiceProcessing() {
       });
       setInvoiceMessage({
         type: "success",
-        text: `Invoice logged. Converted amount: RON ${response.data.amount_ron}.`,
+        text: `Invoice logged. Rate: ${response.data.exchange_rate} RON/${response.data.currency}. Converted amount: RON ${response.data.amount_ron}.`,
       });
       reset({
         invoice_number: "",
@@ -273,6 +273,11 @@ export default function InvoiceProcessing() {
               <p className="mt-1 text-sm text-slate-500">
                 This invoice will be linked to purchase order #
                 {match.purchase_order_id}.
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                EUR amounts are converted for informational RON reporting using
+                the reference rate available on or before the invoice date. The
+                selected rate does not determine VAT or accounting recognition.
               </p>
             </div>
 

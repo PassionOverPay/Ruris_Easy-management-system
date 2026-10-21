@@ -1,7 +1,7 @@
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, computed_field
 from sqlmodel import Field, SQLModel
 
 from app.models import Currency, PurchaseOrderStatus
@@ -33,6 +33,21 @@ class PurchaseOrderRead(SQLModel):
     expected_delivery_date: date
     currency: str
     expected_total_original: float | None
+    budget_exchange_rate: Decimal | None
     items_summary: list[dict[str, object]]
     status: PurchaseOrderStatus
     created_by_id: int
+
+    @computed_field
+    @property
+    def estimated_total_ron(self) -> Decimal | None:
+        if self.expected_total_original is None:
+            return None
+        if self.currency == Currency.EUR.value and self.budget_exchange_rate is None:
+            return None
+
+        rate = self.budget_exchange_rate or Decimal("1")
+        return (Decimal(str(self.expected_total_original)) * rate).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
