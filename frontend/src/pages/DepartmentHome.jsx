@@ -39,6 +39,7 @@ const navigationRoles = {
 export default function DepartmentHome({ role }) {
   const { user, logout } = useAuth();
   const content = departmentContent[role];
+  const isAdmin = user.roles.includes("admin");
   const [newUser, setNewUser] = useState({
     email: "",
     full_name: "",
@@ -124,19 +125,19 @@ export default function DepartmentHome({ role }) {
         <p>{content.description}</p>
         {role === "purchasing" && (
           <>
-            <CreatePOForm />
+            {!isAdmin && <CreatePOForm />}
             <POHistoryTable />
           </>
         )}
         {role === "warehouse" && (
           <>
-            <CreateReceiptForm />
+            {!isAdmin && <CreateReceiptForm />}
             <ReceiptsHistoryTable />
           </>
         )}
         {role === "accounting" && (
           <>
-            <InvoiceProcessing />
+            {!isAdmin && <InvoiceProcessing />}
             <InvoicesHistoryTable />
           </>
         )}
