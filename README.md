@@ -56,7 +56,7 @@ manifest remains dedicated to Neon CLI configuration.
 ## Containerized local deployment
 
 Docker Compose runs a local PostgreSQL database, the FastAPI API, the separate
-daily email worker, and the Nginx-served frontend. The default PostgreSQL
+daily background worker, and the Nginx-served frontend. The default PostgreSQL
 credentials in Compose are for local development only; `DATABASE_URL` and
 `DATABASE_URL_UNPOOLED` from `.env.local` take precedence when set, and the
 local database URLs are used as fallbacks. Set a strong
@@ -76,8 +76,9 @@ Compose recreates containers with the updated environment.
 Open `http://localhost`. The API is also available at `http://localhost:8000`.
 Nginx forwards `/api/` and `/token` to the backend and falls back to
 `index.html` for React Router paths. The worker is a separate process:
-`python -m app.worker`. It runs the scheduled delayed-order check at 08:00
-server-local time; the API process does not start the scheduler.
+`python -m app.worker`. It runs the delayed-order check at 08:00 and stores the
+daily EUR/RON reference rate at 00:01 server-local time; the API process does
+not start the scheduler.
 
 For AWS, do not use the Compose PostgreSQL development password or commit
 secrets. Build and publish the backend image to ECR, provide production settings
@@ -100,15 +101,17 @@ item quantities. Run its SQLite-backed tests from `backend` with
 `python -m unittest discover -s tests -v`.
 
 Accounting creates invoices through `POST /api/v1/accounting/invoices`. EUR
-invoices use the existing ECB EUR/RON reference-rate lookup, with Frankfurter
-as fallback, for the latest published rate on or before the invoice date. The
-six-decimal rate and the resulting RON amount are stored with the original
-invoice currency and amount. This is an informational conversion basis, not a
-determination of the correct VAT or accounting recognition rate; that depends
-on the applicable transaction, tax point, receipt date, contract, and
+EUR invoices use the rate stored for the invoice date in `exchange_rates`.
+The dedicated worker fetches the latest published ECB EUR/RON reference rate
+on or before each calendar date, with Frankfurter as fallback, and stores it
+under that date. The six-decimal rate and resulting RON amount are stored with
+the original invoice currency and amount. If no stored rate exists for the
+invoice date, the API returns `503` and saves no invoice; it does not fetch a
+rate while creating the invoice. This is an informational conversion basis,
+not a determination of the correct VAT or accounting recognition rate; that
+depends on the applicable transaction, tax point, receipt date, contract, and
 accounting policy. RON invoices use a 1:1 rate without calling an external
-service. If no historical rate can be obtained, the API returns `503` and
-saves no invoice.
+service.
 
 EUR purchase orders use the same lookup for the order date. The original
 currency and PO amount remain authoritative, while the retrieved rate is stored

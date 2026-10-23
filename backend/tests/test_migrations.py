@@ -4,7 +4,7 @@ from pathlib import Path
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 
 
 class PurchaseOrderBudgetRateMigrationTests(unittest.TestCase):
@@ -54,6 +54,38 @@ class PurchaseOrderBudgetRateMigrationTests(unittest.TestCase):
         self.assertEqual(row.currency, "EUR")
         self.assertEqual(row.expected_total_original, 100.0)
         self.assertIsNone(row.budget_exchange_rate)
+        engine.dispose()
+
+    def test_exchange_rate_migration_creates_unique_date_table(self) -> None:
+        engine = create_engine("sqlite://")
+        migration_path = (
+            Path(__file__).resolve().parents[2]
+            / "alembic"
+            / "versions"
+            / "e5f6a7b8c9d0_create_exchange_rates.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "exchange_rates_migration",
+            migration_path,
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+
+        with engine.begin() as connection:
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+
+        inspector = inspect(engine)
+        self.assertEqual(
+            {column["name"] for column in inspector.get_columns("exchange_rates")},
+            {"id", "date", "currency_pair", "rate"},
+        )
+        self.assertEqual(
+            inspector.get_unique_constraints("exchange_rates"),
+            [{"name": "uq_exchange_rates_date", "column_names": ["date"]}],
+        )
         engine.dispose()
 
 

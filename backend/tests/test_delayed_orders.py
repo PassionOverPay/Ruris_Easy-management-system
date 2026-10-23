@@ -167,6 +167,16 @@ class DelayedOrderAlertTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job.trigger.fields[6].name, "minute")
         self.assertEqual(str(job.trigger.fields[6]), "0")
 
+    def test_scheduler_fetches_exchange_rates_daily_at_001(self) -> None:
+        scheduler = create_scheduler()
+        job = scheduler.get_job("daily-eur-ron-exchange-rate")
+
+        self.assertIsNotNone(job)
+        self.assertEqual(job.trigger.fields[5].name, "hour")
+        self.assertEqual(str(job.trigger.fields[5]), "0")
+        self.assertEqual(job.trigger.fields[6].name, "minute")
+        self.assertEqual(str(job.trigger.fields[6]), "1")
+
     async def test_worker_starts_and_stops_scheduler(self) -> None:
         scheduler = create_scheduler()
         with patch("app.worker.create_scheduler", return_value=scheduler):
