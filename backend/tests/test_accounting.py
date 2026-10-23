@@ -13,6 +13,7 @@ from app.main import app
 from app.models import (
     AuditLog,
     GoodsReceipt,
+    ExchangeRate,
     Invoice,
     InvoiceStatus,
     PurchaseOrder,
@@ -296,12 +297,26 @@ class InvoiceEndpointTests(unittest.TestCase):
         )
         self.session.commit()
 
-    def test_eur_invoice_fetches_rate_and_saves_converted_amount(self) -> None:
+    def add_exchange_rate(
+        self,
+        rate: float,
+        rate_date: date = date(2026, 10, 16),
+    ) -> None:
+        self.session.add(
+            ExchangeRate(
+                date=rate_date,
+                currency_pair="EUR_RON",
+                rate=rate,
+            )
+        )
+        self.session.commit()
+
+    def test_eur_invoice_uses_stored_rate_and_saves_converted_amount(self) -> None:
+        self.add_exchange_rate(5.331)
         with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
+            "app.services.exchange_rates.get_eur_to_ron_rate",
             new_callable=AsyncMock,
-            return_value=Decimal("5.331"),
-        ) as get_rate:
+        ) as fetch_rate:
             response = self.client.post(
                 "/api/v1/accounting/invoices",
                 json=self.invoice_payload("EUR"),
@@ -313,7 +328,7 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["amount_ron"], "533.10")
         self.assertEqual(response.json()["status"], "pending")
         self.assertEqual(response.json()["logged_by_id"], self.user_id)
-        get_rate.assert_awaited_once_with(date(2026, 10, 16))
+        fetch_rate.assert_not_awaited()
         saved = self.session.exec(select(Invoice)).one()
         self.assertEqual(saved.amount_ron, Decimal("533.10"))
         self.assertEqual(saved.amount_original, Decimal("100.00"))
@@ -324,6 +339,7 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(audit.entity_id, str(saved.id))
 
     def test_invoice_uses_its_own_rate_not_the_po_budget_rate(self) -> None:
+        self.add_exchange_rate(6.1234567)
         order = self.create_purchase_order()
         order.currency = "EUR"
         order.budget_exchange_rate = Decimal("5.000000")
@@ -333,16 +349,11 @@ class InvoiceEndpointTests(unittest.TestCase):
         payload = self.invoice_payload("EUR")
         payload["purchase_order_id"] = order.id
 
-        with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
-            new_callable=AsyncMock,
-            return_value=Decimal("6.1234567"),
-        ) as get_rate:
-            response = self.client.post(
-                "/api/v1/accounting/invoices",
-                json=payload,
-                headers=self.headers,
-            )
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
 
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["status"], "matched")
@@ -350,50 +361,41 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["amount_original"], "100.00")
         self.assertEqual(response.json()["amount_ron"], "612.35")
         self.assertIn("not a VAT or accounting-policy rate", response.json()["exchange_rate_purpose"])
-        get_rate.assert_awaited_once_with(date(2026, 10, 16))
 
-    def test_invoice_history_keeps_saved_rate_when_provider_rate_changes(self) -> None:
-        with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
-            new_callable=AsyncMock,
-            return_value=Decimal("5.331"),
-        ):
-            created = self.client.post(
-                "/api/v1/accounting/invoices",
-                json=self.invoice_payload("EUR"),
-                headers=self.headers,
-            )
+    def test_invoice_history_keeps_rate_saved_on_invoice(self) -> None:
+        self.add_exchange_rate(5.331)
+        created = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=self.invoice_payload("EUR"),
+            headers=self.headers,
+        )
         self.assertEqual(created.status_code, 201, created.text)
 
-        with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
-            new_callable=AsyncMock,
-            return_value=Decimal("8.000000"),
-        ) as changed_rate:
-            listed = self.client.get(
-                "/api/v1/accounting/invoices",
-                headers=self.headers,
-            )
+        self.session.exec(
+            select(ExchangeRate).where(ExchangeRate.date == date(2026, 10, 16))
+        ).one().rate = 8.0
+        self.session.commit()
+        listed = self.client.get(
+            "/api/v1/accounting/invoices",
+            headers=self.headers,
+        )
 
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()[0]["exchange_rate"], "5.331000")
         self.assertEqual(listed.json()[0]["amount_ron"], "533.10")
-        changed_rate.assert_not_awaited()
 
-    def test_eur_invoice_is_not_saved_when_rate_is_unavailable(self) -> None:
-        with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
-            new_callable=AsyncMock,
-            side_effect=ExchangeRateUnavailable("No historical rate."),
-        ):
-            response = self.client.post(
-                "/api/v1/accounting/invoices",
-                json=self.invoice_payload("EUR"),
-                headers=self.headers,
-            )
+    def test_eur_invoice_requires_rate_for_exact_invoice_date(self) -> None:
+        self.add_exchange_rate(5.33, date(2026, 10, 15))
+        payload = self.invoice_payload("EUR")
+        payload["exchange_rate"] = "1.000001"
+        response = self.client.post(
+            "/api/v1/accounting/invoices",
+            json=payload,
+            headers=self.headers,
+        )
 
         self.assertEqual(response.status_code, 503)
-        self.assertIn("No historical rate", response.json()["detail"])
+        self.assertIn("No stored EUR/RON exchange rate", response.json()["detail"])
         self.assertEqual(self.session.exec(select(Invoice)).all(), [])
 
     def test_non_accounting_role_cannot_create_invoice(self) -> None:
@@ -419,9 +421,9 @@ class InvoiceEndpointTests(unittest.TestCase):
 
     def test_ron_invoice_does_not_call_external_rate_service(self) -> None:
         with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
+            "app.services.exchange_rates.get_eur_to_ron_rate",
             new_callable=AsyncMock,
-        ) as get_rate:
+        ) as fetch_rate:
             response = self.client.post(
                 "/api/v1/accounting/invoices",
                 json=self.invoice_payload("RON"),
@@ -432,7 +434,7 @@ class InvoiceEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["exchange_rate"], "1.000000")
         self.assertEqual(response.json()["amount_ron"], "100.00")
         self.assertEqual(response.json()["status"], "pending")
-        get_rate.assert_not_awaited()
+        fetch_rate.assert_not_awaited()
 
     def test_invoice_is_matched_when_receipt_quantities_match_order(self) -> None:
         order = self.create_purchase_order()
@@ -580,25 +582,6 @@ class InvoiceEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
-
-    def test_rate_failure_returns_503_and_does_not_save_invoice(self) -> None:
-        with patch(
-            "app.api.routes.accounting.get_eur_to_ron_rate",
-            new_callable=AsyncMock,
-            side_effect=ExchangeRateUnavailable(
-                "No EUR/RON rate is available for 2026-10-16. No invoice was saved."
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/accounting/invoices",
-                json=self.invoice_payload("EUR"),
-                headers=self.headers,
-            )
-
-        self.assertEqual(response.status_code, 503)
-        self.assertIn("No invoice was saved", response.json()["detail"])
-        self.assertEqual(self.session.exec(select(Invoice)).all(), [])
-
 
 if __name__ == "__main__":
     unittest.main()

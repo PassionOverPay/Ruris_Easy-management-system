@@ -1,6 +1,7 @@
 from app.models.models import (
     AuditLog,
     Currency,
+    ExchangeRate,
     GoodsReceipt,
     Invoice,
     InvoiceStatus,
@@ -13,6 +14,7 @@ from app.models.models import (
 __all__ = [
     "AuditLog",
     "Currency",
+    "ExchangeRate",
     "GoodsReceipt",
     "Invoice",
     "InvoiceStatus",

@@ -1,9 +1,18 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date as Date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import Column, Enum as SQLAlchemyEnum, Float, JSON, Numeric, String
+from sqlalchemy import (
+    Column,
+    Date as SQLAlchemyDate,
+    Enum as SQLAlchemyEnum,
+    Float,
+    JSON,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlmodel import Field, SQLModel
 
 
@@ -55,8 +64,8 @@ class PurchaseOrder(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     po_number: str = Field(index=True, unique=True)
     supplier_name: str
-    order_date: date
-    expected_delivery_date: date
+    order_date: Date
+    expected_delivery_date: Date
     currency: str = Field(
         default="RON",
         sa_column=Column(String(length=3), nullable=False, default="RON"),
@@ -118,7 +127,7 @@ class Invoice(SQLModel, table=True):
         index=True,
     )
     supplier_name: str
-    invoice_date: date
+    invoice_date: Date
     currency: Currency = Field(
         sa_column=Column(
             SQLAlchemyEnum(
@@ -149,6 +158,19 @@ class Invoice(SQLModel, table=True):
     )
     match_notes: str | None = Field(default=None)
     logged_by_id: int = Field(foreign_key="users.id")
+
+
+class ExchangeRate(SQLModel, table=True):
+    __tablename__ = "exchange_rates"
+    __table_args__ = (UniqueConstraint("date", name="uq_exchange_rates_date"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    date: Date = Field(sa_column=Column(SQLAlchemyDate, nullable=False))
+    currency_pair: str = Field(
+        default="EUR_RON",
+        sa_column=Column(String(length=7), nullable=False, default="EUR_RON"),
+    )
+    rate: float = Field(sa_column=Column(Float, nullable=False))
 
 
 class AuditLog(SQLModel, table=True):

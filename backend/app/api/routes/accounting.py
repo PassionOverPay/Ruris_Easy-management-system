@@ -1,7 +1,6 @@
-from fastapi import APIRouter
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
 
@@ -10,6 +9,7 @@ from app.api.pdf_response import pdf_response
 from app.db.session import get_session
 from app.models import (
     Currency,
+    ExchangeRate,
     Invoice,
     InvoiceStatus,
     PurchaseOrder,
@@ -18,7 +18,6 @@ from app.models import (
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceRead
 from app.services.audit import log_action
-from app.services.currency import ExchangeRateUnavailable, get_eur_to_ron_rate
 from app.services.notifications import notify_teams
 from app.services.pdf_documents import generate_invoice_pdf
 from app.services.three_way_match import reconcile_po_invoices
@@ -82,11 +81,21 @@ async def create_invoice(
             )
 
     if invoice_data.currency == Currency.EUR:
-        try:
-            exchange_rate = await get_eur_to_ron_rate(invoice_data.invoice_date)
-        except ExchangeRateUnavailable as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        exchange_rate = exchange_rate.quantize(
+        stored_rate = session.exec(
+            select(ExchangeRate).where(
+                ExchangeRate.date == invoice_data.invoice_date,
+                ExchangeRate.currency_pair == "EUR_RON",
+            )
+        ).first()
+        if stored_rate is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "No stored EUR/RON exchange rate is available for "
+                    f"{invoice_data.invoice_date}. No invoice was saved."
+                ),
+            )
+        exchange_rate = Decimal(str(stored_rate.rate)).quantize(
             Decimal("0.000001"),
             rounding=ROUND_HALF_UP,
         )
